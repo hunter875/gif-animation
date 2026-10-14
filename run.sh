@@ -5,6 +5,7 @@
 #   ./run.sh            chay app
 #   ./run.sh --test     chay test (khong can man hinh)
 #   ./run.sh --accept   kiem tra tung tieu chi nghiem thu
+#   ./run.sh --phase3   kiem tra vong doi pet (Giai doan 3)
 #   ./run.sh --headless chay app o che do khong man hinh (kiem tra khoi dong)
 set -euo pipefail
 
@@ -18,9 +19,10 @@ MODE="run"
 case "${1:-}" in
     --test)     MODE="test" ;;
     --accept)   MODE="accept" ;;
+    --phase3)   MODE="phase3" ;;
     --headless) MODE="headless" ;;
     --help|-h)
-        sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
         exit 0
         ;;
     "") ;;
@@ -50,6 +52,11 @@ fi
 if [ "$MODE" = "accept" ]; then
     exec env QT_QPA_PLATFORM=offscreen \
         "$VENV_DIR/bin/python" "$SCRIPT_DIR/tests/test_acceptance.py"
+fi
+
+if [ "$MODE" = "phase3" ]; then
+    exec env QT_QPA_PLATFORM=offscreen \
+        "$VENV_DIR/bin/python" "$SCRIPT_DIR/tests/test_phase3_flow.py"
 fi
 
 if [ "$MODE" = "headless" ]; then

@@ -18,6 +18,7 @@ du voi quy tac uu tien se nam o ``gifpet/core/state.py`` (Giai doan 3).
 
 import os
 import random
+import time
 
 from PyQt5.QtCore import QPoint, QRect, QSize, Qt, QTimer
 from PyQt5.QtGui import QIcon, QKeySequence, QMovie, QRegion
@@ -35,8 +36,11 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 
+from gifpet.core import behavior as behavior_module
+from gifpet.core import falling
 from gifpet.core import gif_library, paths, pet_pack
 from gifpet.core import screen_utils
+from gifpet.core import state as state_module
 from gifpet.core.config import Config
 from gifpet.ui.dialogs import ResizeDialog, SettingsDialog
 from gifpet.ui.gif_library_dialog import GifLibraryDialog
@@ -46,10 +50,10 @@ BASE_DIR = paths.PROJECT_ROOT
 WALK_INTERVAL_MS = 40
 WALK_STEP = 2
 
-# Trang thai hien tai cua pet. Giai doan 3 se mo rong thanh may trang thai day du.
-STATE_IDLE = "idle"
-STATE_WALK = "walk"
-STATE_DRAG = "drag"
+# Nhip chay cua vong lap hanh vi (ms).
+BEHAVIOR_TICK_MS = 100
+# Nhip roi (ms) - nhanh hon de chuyen dong muot.
+FALL_TICK_MS = 30
 
 
 class PetWindow(QLabel):
@@ -59,24 +63,69 @@ class PetWindow(QLabel):
         self.config = config or Config()
         self.dragging = False
         self.offset = QPoint()
+        self._press_pos = QPoint()
+        self._moved = False
         self.label = None
         self.movie = None
         self.tray = None
         self.walk_direction = 1
         self._hidden_for_fullscreen = False
         self._current_resolved_path = None
-        self.state = STATE_IDLE
         self.pack = None
         self.packs = []
 
+        # May trang thai va bo dieu phoi hanh vi (Giai doan 3).
+        self.machine = state_module.StateMachine(
+            initial=state_module.IDLE,
+            focus_mode=bool(self.config.get("focus_mode")),
+        )
+        self.machine.listeners.append(self._on_state_changed)
+        self.behavior = behavior_module.Behavior(self.config)
+        self.fall_sim = falling.FallSimulator()
+        self._state_until_ms = 0
+        self._fall_ground_y = 0
+
         self._restore_state()
         self._load_pack()
+        self._configure_from_pack()
         self._setup_window_flags()
         self._load_gif()
         self._setup_timers()
         self._setup_tray()
         self._setup_shortcuts()
         self._restore_geometry()
+
+    @property
+    def state(self):
+        """Trang thai hien tai, lay tu may trang thai."""
+        return self.machine.state
+
+    def pack_behavior(self, key, default):
+        """Gia tri hanh vi tu pet.json, uu tien hon mac dinh."""
+        if self.pack is not None:
+            value = self.pack.behavior.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return value
+        return default
+
+    def pack_movement(self, key, default):
+        """Gia tri di chuyen tu pet.json."""
+        if self.pack is not None:
+            value = self.pack.movement.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return value
+        return default
+
+    def _configure_from_pack(self):
+        """Ap dung thong so cua nhan vat vao bo mo phong roi."""
+        self.fall_sim = falling.FallSimulator(
+            gravity=self.pack_behavior("fall_gravity", 2.2),
+            max_speed=self.pack_behavior("fall_max_speed", 28.0),
+        )
+
+    def now_ms(self):
+        """Dong ho don dieu, dung cho logic hanh vi."""
+        return int(time.monotonic() * 1000)
 
     # ------------------------------------------------------------------
     # Khoi tao
@@ -151,13 +200,107 @@ class PetWindow(QLabel):
         self.switch_timer.timeout.connect(self.auto_switch_gif)
         self._apply_switch_timer()
 
+        # Vong lap hanh vi: quyet dinh di / nghi / ngu.
+        self.behavior_timer = QTimer(self)
+        self.behavior_timer.timeout.connect(self._behavior_tick)
+        self.behavior_timer.start(BEHAVIOR_TICK_MS)
+
+        # Di chuyen: tach rieng de toc do muot theo pet.json.
         self.walk_timer = QTimer(self)
         self.walk_timer.timeout.connect(self._walk_step)
+
+        # Roi: nhip nhanh hon.
+        self.fall_timer = QTimer(self)
+        self.fall_timer.timeout.connect(self._fall_step)
+
+        # Het thoi gian phan ung / noi thi quay ve idle.
+        self.state_timer = QTimer(self)
+        self.state_timer.setSingleShot(True)
+        self.state_timer.timeout.connect(self._on_state_timeout)
 
         self.fullscreen_timer = QTimer(self)
         self.fullscreen_timer.timeout.connect(self._check_fullscreen)
         if self.config.get("hide_on_fullscreen"):
             self.fullscreen_timer.start(1000)
+
+    # ------------------------------------------------------------------
+    # Vong lap hanh vi (Giai doan 3)
+    # ------------------------------------------------------------------
+    def _behavior_tick(self):
+        """Goi moi 100ms: quyet dinh pet tu lam gi."""
+        if self.config.get("animation_paused") or not self.config.get("visible"):
+            return
+        if self._hidden_for_fullscreen or not self.config.get("auto_walk"):
+            # Van cho ngu du khong bat tu di.
+            if self.machine.state == state_module.IDLE and not self.config.get("auto_walk"):
+                self.behavior.idle_tick(self.machine, self.now_ms())
+            return
+
+        now = self.now_ms()
+        if self.machine.state == state_module.WALK:
+            self.behavior.walk_tick(self.machine, now)
+        else:
+            self.behavior.idle_tick(self.machine, now)
+
+    def _on_state_changed(self, previous, current):
+        """Phan ung khi trang thai doi: doi animation va bat/tat timer."""
+        self._apply_state_animation(current)
+        self._sync_state_timers(previous, current)
+        print(f"[state] {previous} -> {current} ({self.machine.reason})")
+
+    def _apply_state_animation(self, state_name):
+        if self.pack is None:
+            return
+        path = self.pack.animation_path(state_name)
+        if path is None:
+            return
+        self._apply_movie(path)
+
+    def _sync_state_timers(self, previous, current):
+        """Bat/tat timer theo trang thai moi."""
+        # Di chuyen.
+        if current == state_module.WALK:
+            interval = int(self.pack_movement("step_interval_ms", 40))
+            self.walk_timer.start(max(10, interval))
+        else:
+            self.walk_timer.stop()
+
+        # Roi.
+        if current == state_module.FALL:
+            self.fall_sim.reset()
+            self._fall_ground_y = falling.ground_y_for_screen(self.app)
+            self.fall_timer.start(FALL_TICK_MS)
+        else:
+            self.fall_timer.stop()
+
+        # Trang thai co thoi han.
+        self.state_timer.stop()
+        if current == state_module.REACT:
+            self.state_timer.start(int(self.pack_behavior("react_duration_ms", 1500)))
+        elif current == state_module.TALK:
+            self.state_timer.start(int(self.pack_behavior("talk_duration_ms", 3000)))
+
+        # Ngu thi dung moi chuyen dong.
+        if current == state_module.SLEEP:
+            self.walk_timer.stop()
+
+    def _on_state_timeout(self):
+        """Het thoi gian phan ung hoac noi: quay ve idle."""
+        if self.machine.state in (state_module.REACT, state_module.TALK):
+            self.machine.request(state_module.IDLE, reason="hết thời gian hiệu ứng")
+
+    def _fall_step(self):
+        """Mot buoc roi. Tiep dat thi chuyen sang idle."""
+        ground = self._fall_ground_y
+        new_y, landed = self.fall_sim.next_y(self.y(), self.height(), ground)
+        # FallSimulator tra ve float; Qt move() can int.
+        new_y = int(round(new_y))
+        self.move(int(self.x()), new_y)
+        if landed:
+            self.fall_timer.stop()
+            self.config.data["y"] = new_y
+            self.config.save()
+            self.behavior.on_landed(self.machine, self.now_ms())
 
     def _setup_tray(self):
         """Tao icon khay he thong. Khong co tray thi app van chay."""
@@ -208,6 +351,13 @@ class PetWindow(QLabel):
         self.action_walk = QAction("Pet tự đi", self, checkable=True)
         self.action_walk.triggered.connect(self.toggle_auto_walk)
 
+        self.action_focus = QAction("Chế độ tập trung", self, checkable=True)
+        self.action_focus.setToolTip("Pet đứng yên hoặc ngủ, không tự đi")
+        self.action_focus.triggered.connect(self.toggle_focus_mode)
+
+        self.action_sleep = QAction("Cho pet ngủ ngay", self)
+        self.action_sleep.triggered.connect(self.send_to_sleep)
+
         self.action_click_through = QAction("Click xuyên qua pet", self, checkable=True)
         self.action_click_through.triggered.connect(self.toggle_click_through)
 
@@ -239,6 +389,8 @@ class PetWindow(QLabel):
         self.menu.addSeparator()
         self.menu.addAction(self.action_auto_switch)
         self.menu.addAction(self.action_walk)
+        self.menu.addAction(self.action_focus)
+        self.menu.addAction(self.action_sleep)
         self.menu.addAction(self.action_click_through)
         self.menu.addAction(self.action_hide_fullscreen)
         self.menu.addAction(self.action_pin)
@@ -261,6 +413,8 @@ class PetWindow(QLabel):
         self.action_pause.setChecked(bool(self.config.get("animation_paused")))
         self.action_auto_switch.setChecked(bool(self.config.get("auto_switch_enabled")))
         self.action_walk.setChecked(bool(self.config.get("auto_walk")))
+        self.action_focus.setChecked(bool(self.config.get("focus_mode")))
+        self.action_sleep.setEnabled(self.machine.can_sleep())
         self.action_click_through.setChecked(bool(self.config.get("click_through")))
         self.action_pin.setChecked(bool(self.config.get("pin_to_top")))
         self.action_hide_fullscreen.setChecked(bool(self.config.get("hide_on_fullscreen")))
@@ -465,25 +619,59 @@ class PetWindow(QLabel):
     # ------------------------------------------------------------------
     # Chuot
     # ------------------------------------------------------------------
+    # Khoang di chuyen toi thieu (px) de coi la keo chu thay vi click.
+    DRAG_THRESHOLD = 4
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.dragging = True
             self.offset = event.globalPos() - self.pos()
+            self._press_pos = event.globalPos()
+            self._moved = False
+            # Chua vao trang thai drag ngay: phai doi xem nguoi dung co keo
+            # that khong. Neu chi bam roi nha thi do la click, khong phai keo.
         elif event.button() == Qt.RightButton:
             self._popup_menu(event.globalPos())
 
     def mouseMoveEvent(self, event):
         """Chi di chuyen cua so; KHONG ghi file o day."""
-        if self.dragging and event.buttons() == Qt.LeftButton:
+        if not (self.dragging and event.buttons() == Qt.LeftButton):
+            return
+
+        if not self._moved:
+            moved_enough = (
+                event.globalPos() - self._press_pos
+            ).manhattanLength() > self.DRAG_THRESHOLD
+            if moved_enough:
+                self._moved = True
+                # Keo that su: luc nay moi vao trang thai drag (vung vay).
+                self.behavior.on_drag_start(self.machine, self.now_ms())
+
+        if self._moved:
             self.move(event.globalPos() - self.offset)
 
     def mouseReleaseEvent(self, event):
-        """Luu vi tri mot lan duy nhat khi tha chuot."""
-        if event.button() == Qt.LeftButton and self.dragging:
-            self.dragging = False
-            self.config.data["x"] = self.x()
-            self.config.data["y"] = self.y()
-            self.config.save()
+        """Tha chuot: luu vi tri, va quyet dinh roi hay dung yen."""
+        if event.button() != Qt.LeftButton or not self.dragging:
+            return
+        self.dragging = False
+
+        now = self.now_ms()
+
+        # Bam roi nha ma khong keo: day la click, pet phan ung.
+        if not self._moved:
+            self.behavior.on_click(self.machine, now)
+            return
+
+        self.config.data["x"] = self.x()
+        self.config.data["y"] = self.y()
+        self.config.save()
+
+        # Tha giua khong trung thi roi xuong.
+        ground = falling.ground_y_for_screen(self.app)
+        tolerance = self.pack_behavior("near_ground_px", 60)
+        near = falling.near_ground(self.y(), self.height(), ground, tolerance)
+        self.behavior.on_drag_release(self.machine, now, near_ground=near)
 
     # ------------------------------------------------------------------
     # Hanh dong menu
@@ -526,24 +714,36 @@ class PetWindow(QLabel):
             self.switch_timer.stop()
 
     def toggle_auto_walk(self):
+        """Bat/tat pet tu di. Vong lap hanh vi se lo phan con lai."""
         enabled = not bool(self.config.get("auto_walk"))
         self.config.data["auto_walk"] = enabled
-        self._apply_walk_timer()
+        if not enabled and self.machine.state == state_module.WALK:
+            self.behavior.stop_walking(self.machine, self.now_ms())
         self.config.save()
 
     def _apply_walk_timer(self):
-        if self.config.get("auto_walk") and self.config.get("visible"):
-            self.walk_timer.start(WALK_INTERVAL_MS)
-        else:
-            self.walk_timer.stop()
+        """Giu lai de tuong thich; vong lap hanh vi quan ly walk_timer."""
+        if not self.config.get("auto_walk") and self.machine.state == state_module.WALK:
+            self.behavior.stop_walking(self.machine, self.now_ms())
 
     def _walk_step(self):
-        """Pet tu đi ngang trong pham vi man hinh chinh."""
+        """Pet tu di ngang. Cham bien man hinh thi quay dau, khong di mat."""
         screen = self.app.primaryScreen()
         if screen is None:
             return
+        if self.machine.state != state_module.WALK:
+            self.walk_timer.stop()
+            return
+
+        # Toc do uu tien lay tu config, roi den pet.json.
+        speed = int(self.config.get("walk_speed") or 0)
+        if speed <= 0:
+            speed = int(self.pack_movement("speed_px_per_step", WALK_STEP))
+        speed = max(1, speed)
+
         area = QRect(screen.availableGeometry())
-        x = self.x() + WALK_STEP * self.walk_direction
+        x = self.x() + speed * self.walk_direction
+        # Cham bien thi quay dau va kep lai trong man hinh.
         if x <= area.left():
             x = area.left()
             self.walk_direction = 1
@@ -552,6 +752,30 @@ class PetWindow(QLabel):
             self.walk_direction = -1
         self.move(x, self.y())
         self.config.data["x"] = x
+
+    def send_to_sleep(self):
+        """Cho pet ngu ngay, bo qua thoi gian cho."""
+        if not self.machine.can_sleep():
+            print("Không thể cho ngủ lúc này (đang bị kéo hoặc đang rơi).")
+            return False
+        return self.machine.request(state_module.SLEEP, reason="người dùng cho ngủ")
+
+    def wake_up(self):
+        """Danh thuc pet."""
+        return self.behavior.note_interaction(self.now_ms()) or self.machine.on_interaction()
+
+    def toggle_focus_mode(self):
+        """Che do tap trung: pet dung yen hoac ngu, khong tu di."""
+        enabled = not bool(self.config.get("focus_mode"))
+        self.config.data["focus_mode"] = enabled
+        self.machine.set_focus_mode(enabled)
+        self.behavior.note_interaction(self.now_ms())
+        self.config.save()
+        print(
+            "Chế độ tập trung: BẬT - pet đứng yên."
+            if enabled
+            else "Chế độ tập trung: TẮT - pet tự đi lại."
+        )
 
     def toggle_click_through(self):
         enabled = not bool(self.config.get("click_through"))
@@ -708,6 +932,7 @@ class PetWindow(QLabel):
             self.config.get("hide_on_fullscreen")
         )
         pin_changed = values["pin_to_top"] != bool(self.config.get("pin_to_top"))
+        focus_changed = values["focus_mode"] != bool(self.config.get("focus_mode"))
 
         self.config.data.update(values)
         self.config.save()
@@ -718,6 +943,9 @@ class PetWindow(QLabel):
             self.toggle_fullscreen_watch(values["hide_on_fullscreen"])
         if pin_changed:
             self._apply_pin(values["pin_to_top"], persist=False)
+        if focus_changed:
+            # Ap dung che do tap trung qua may trang thai.
+            self.machine.set_focus_mode(values["focus_mode"])
         self._apply_switch_timer()
         self._apply_walk_timer()
 

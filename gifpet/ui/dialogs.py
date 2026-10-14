@@ -109,6 +109,30 @@ class SettingsDialog(QDialog):
         self.auto_walk.setChecked(bool(config.get("auto_walk")))
         form.addRow(self.auto_walk)
 
+        self.focus_mode = QCheckBox("Chế độ tập trung (đứng yên hoặc ngủ)", self)
+        self.focus_mode.setChecked(bool(config.get("focus_mode")))
+        form.addRow(self.focus_mode)
+
+        self.walk_speed = QSpinBox(self)
+        self.walk_speed.setRange(1, 20)
+        self.walk_speed.setSuffix(" px/bước")
+        self.walk_speed.setValue(max(1, int(config.get("walk_speed", 2))))
+        form.addRow("Tốc độ tự đi:", self.walk_speed)
+
+        self.walk_pause = QSpinBox(self)
+        self.walk_pause.setRange(0, 100)
+        self.walk_pause.setSuffix(" %")
+        self.walk_pause.setValue(
+            int(round(float(config.get("walk_pause_chance", 0.3)) * 100))
+        )
+        form.addRow("Tần suất nghỉ dài:", self.walk_pause)
+
+        self.sleep_after = QSpinBox(self)
+        self.sleep_after.setRange(5, 3600)
+        self.sleep_after.setSuffix(" giây")
+        self.sleep_after.setValue(max(5, int(config.get("sleep_after_seconds", 120))))
+        form.addRow("Ngủ sau khi rảnh:", self.sleep_after)
+
         self.click_through = QCheckBox("Click xuyên qua pet", self)
         self.click_through.setChecked(bool(config.get("click_through")))
         form.addRow(self.click_through)
@@ -125,7 +149,8 @@ class SettingsDialog(QDialog):
 
         note = QLabel(
             "Khi bật “Click xuyên qua pet”, chuột sẽ không bấm được vào pet. "
-            "Dùng khay hệ thống hoặc phím tắt để tắt lại.",
+            "Dùng khay hệ thống hoặc phím tắt để tắt lại.\n\n"
+            "“Chế độ tập trung” giữ pet đứng yên hoặc ngủ, không tự đi lại.",
             self,
         )
         note.setWordWrap(True)
@@ -141,6 +166,10 @@ class SettingsDialog(QDialog):
             "auto_switch_enabled": self.auto_switch.isChecked(),
             "auto_switch_seconds": self.interval.value(),
             "auto_walk": self.auto_walk.isChecked(),
+            "focus_mode": self.focus_mode.isChecked(),
+            "walk_speed": self.walk_speed.value(),
+            "walk_pause_chance": self.walk_pause.value() / 100.0,
+            "sleep_after_seconds": self.sleep_after.value(),
             "click_through": self.click_through.isChecked(),
             "hide_on_fullscreen": self.hide_fullscreen.isChecked(),
             "pin_to_top": self.pin.isChecked(),

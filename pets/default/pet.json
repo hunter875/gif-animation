@@ -1,12 +1,15 @@
 {
     "name": "default",
     "display_name": "Mèo mặc định",
-    "description": "Nhân vật mẫu đi kèm repo. Bốn GIF hiện có được gán tạm cho bốn trạng thái; các trạng thái còn thiếu sẽ dùng idle.gif.",
+    "description": "Nhân vật mẫu đi kèm repo. Bảy trạng thái đều có GIF. fall/react/talk được sinh từ GIF gốc bằng tools/make_state_animations.py.",
     "animations": {
         "idle": "idle.gif",
         "walk": "walk.gif",
         "drag": "drag.gif",
-        "sleep": "sleep.gif"
+        "fall": "fall.gif",
+        "sleep": "sleep.gif",
+        "react": "react.gif",
+        "talk": "talk.gif"
     },
     "fallback_animation": "idle.gif",
     "size": {
@@ -17,15 +20,18 @@
     "movement": {
         "speed_px_per_step": 2,
         "step_interval_ms": 40,
+        "walk_duration_ms": 4000,
         "pause_chance": 0.3,
-        "min_pause_ms": 2000,
-        "max_pause_ms": 8000
+        "min_pause_ms": 1000,
+        "max_pause_ms": 12000
     },
     "behavior": {
         "idle_to_sleep_ms": 120000,
         "react_duration_ms": 1500,
-        "fall_speed_px_per_step": 14,
-        "fall_step_interval_ms": 30
+        "talk_duration_ms": 3000,
+        "fall_gravity": 2.2,
+        "fall_max_speed": 28.0,
+        "near_ground_px": 60
     },
     "personality": {
         "tone": "thân thiện, hơi lười",

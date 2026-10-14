@@ -6,6 +6,7 @@ Hoac: QT_QPA_PLATFORM=offscreen .venv/bin/python tests/test_core.py
 
 import json
 import os
+import random
 import shutil
 import sys
 import tempfile
@@ -17,6 +18,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtWidgets import QApplication  # noqa: E402
 
+from gifpet.core import behavior as behavior_module  # noqa: E402
+from gifpet.core import falling  # noqa: E402
 from gifpet.core import gif_library  # noqa: E402
 from gifpet.core import pet_pack  # noqa: E402
 from gifpet.core import screen_utils  # noqa: E402
@@ -336,21 +339,25 @@ class TestMouseMoveDoesNotWrite(unittest.TestCase):
         from PyQt5.QtGui import QMouseEvent
 
         start = window.pos()
+        # Mo phong mot lan keo that: bam xuong roi di chuyen.
         window.dragging = True
         window.offset = QPoint(0, 0)
+        window._press_pos = start
+        window._moved = False
 
-        # Mo phong 50 lan di chuyen chuot.
-        for step in range(50):
+        # Mo phong 50 lan di chuyen chuot (vuot nguong de tinh la keo).
+        for step in range(1, 51):
             event = QMouseEvent(
                 QEvent.MouseMove,
                 QPoint(step, step),
-                QPoint(start.x() + step, start.y() + step),
+                QPoint(start.x() + step * 3, start.y() + step * 3),
                 Qt.LeftButton,
                 Qt.LeftButton,
                 Qt.NoModifier,
             )
             window.mouseMoveEvent(event)
 
+        self.assertTrue(window._moved, "Di chuyen xa phai duoc coi la keo")
         self.assertEqual(
             save_calls, [], "mouseMoveEvent khong duoc ghi file"
         )
@@ -359,13 +366,61 @@ class TestMouseMoveDoesNotWrite(unittest.TestCase):
         release = QMouseEvent(
             QEvent.MouseButtonRelease,
             QPoint(0, 0),
-            QPoint(0, 0),
+            QPoint(start.x() + 150, start.y() + 150),
             Qt.LeftButton,
             Qt.NoButton,
             Qt.NoModifier,
         )
         window.mouseReleaseEvent(release)
         self.assertEqual(len(save_calls), 1, "Chi ghi mot lan khi tha chuot")
+        window.quit_app()
+
+    def test_click_khong_keo_thi_khong_ghi_file(self):
+        """Bam roi nha ma khong keo la click, vi tri khong doi nen khong ghi."""
+        from PyQt5.QtCore import QEvent, QPoint, Qt
+        from PyQt5.QtGui import QMouseEvent
+
+        from gifpet.ui.pet_window import PetWindow
+
+        temp_dir = tempfile.mkdtemp()
+        config = Config(os.path.join(temp_dir, "config.json"))
+        window = PetWindow(_app, config)
+
+        save_calls = []
+        original_save = config.save
+
+        def counting_save():
+            save_calls.append(1)
+            original_save()
+
+        config.save = counting_save
+
+        start = window.pos()
+        window.mousePressEvent(
+            QMouseEvent(
+                QEvent.MouseButtonPress,
+                QPoint(0, 0),
+                start,
+                Qt.LeftButton,
+                Qt.LeftButton,
+                Qt.NoModifier,
+            )
+        )
+        window.mouseReleaseEvent(
+            QMouseEvent(
+                QEvent.MouseButtonRelease,
+                QPoint(0, 0),
+                start,
+                Qt.LeftButton,
+                Qt.NoButton,
+                Qt.NoModifier,
+            )
+        )
+
+        self.assertFalse(window._moved, "Bam roi nha khong phai keo")
+        self.assertEqual(
+            save_calls, [], "Click khong doi vi tri thi khong can ghi file"
+        )
         window.quit_app()
 
 
@@ -654,24 +709,43 @@ class TestPetPack(unittest.TestCase):
         self.assertTrue(self.pack.has_state("drag"))
         self.assertTrue(self.pack.has_state("sleep"))
 
-    def test_trang_thai_thieu_thi_dung_fallback(self):
-        """Bo pet thieu trang thai van import duoc."""
-        for missing in ("fall", "react", "talk"):
-            self.assertFalse(
-                self.pack.has_state(missing),
-                f"{missing} khong nen co GIF rieng trong bo mau",
-            )
-            path = self.pack.animation_path(missing)
-            self.assertIsNotNone(path, f"{missing} phai fallback chu khong tra ve None")
+    def test_bo_pet_mau_du_bay_trang_thai(self):
+        """Bo pet di kem repo da co GIF cho ca 7 trang thai."""
+        for state_name in state_module.ALL_STATES:
             self.assertTrue(
-                path.endswith(self.pack.fallback_animation),
-                f"{missing} phai dung {self.pack.fallback_animation}",
+                self.pack.has_state(state_name),
+                f"Trang thai {state_name} thieu GIF",
             )
+        self.assertEqual(self.pack.missing_states(), [])
 
-    def test_missing_states_liet_ke_dung(self):
-        missing = self.pack.missing_states()
-        self.assertIn("fall", missing)
-        self.assertNotIn("idle", missing)
+    def test_moi_trang_thai_tra_ve_gif_rieng(self):
+        paths = {}
+        for state_name in state_module.ALL_STATES:
+            path = self.pack.animation_path(state_name)
+            self.assertIsNotNone(path, f"{state_name} khong co GIF")
+            paths[state_name] = path
+        # Cac trang thai phai dung GIF khac nhau, khong dung chung mot file.
+        self.assertEqual(
+            len(set(paths.values())),
+            len(state_module.ALL_STATES),
+            "Moi trang thai phai co animation rieng",
+        )
+
+    def test_bo_pet_thieu_trang_thai_van_dung_duoc(self):
+        """Bo pet chua hoan chinh: thieu trang thai thi dung idle.gif."""
+        temp_dir = tempfile.mkdtemp()
+        # Chi copy idle.gif, khong co walk/drag/...
+        shutil.copy(VALID_GIF, os.path.join(temp_dir, "idle.gif"))
+        pack = pet_pack.load_pack(temp_dir)
+
+        self.assertFalse(pack.has_state("walk"))
+        self.assertIn("walk", pack.missing_states())
+        for state_name in state_module.ALL_STATES:
+            path = pack.animation_path(state_name)
+            self.assertIsNotNone(
+                path, f"{state_name} phai fallback ve idle chu khong tra ve None"
+            )
+            self.assertTrue(path.endswith("idle.gif"))
 
     def test_doc_kich_thuoc_va_toc_do_tu_pet_json(self):
         self.assertGreater(self.pack.movement["speed_px_per_step"], 0)
@@ -696,5 +770,152 @@ class TestPetPack(unittest.TestCase):
         self.assertIsNotNone(pack.animation_path(state_module.IDLE))
 
 
+class TestFallSimulator(unittest.TestCase):
+    """Pet roi khi tha giua khong trung."""
+
+    def test_roi_nhanh_dan(self):
+        sim = falling.FallSimulator()
+        y1, landed1 = sim.next_y(0, 100, 600)
+        y2, landed2 = sim.next_y(y1, 100, 600)
+        self.assertFalse(landed1)
+        self.assertFalse(landed2)
+        # Quang duong sau lon hon quang duong truoc (nhanh dan).
+        self.assertGreater(y2 - y1, y1 - 0, "Roi phai nhanh dan")
+
+    def test_tiep_dat_dung_mep_duoi(self):
+        sim = falling.FallSimulator()
+        ground = 600
+        height = 100
+        y = 0
+        landed = False
+        for _ in range(500):
+            y, landed = sim.next_y(y, height, ground)
+            if landed:
+                break
+        self.assertTrue(landed, "Phai tiep dat sau vai buoc")
+        self.assertEqual(y, ground - height, "Phai dung o mep duoi man hinh")
+
+    def test_khong_vuot_qua_mat_dat(self):
+        sim = falling.FallSimulator()
+        y, _ = sim.next_y(599, 100, 600)
+        self.assertLessEqual(y + 100, 600)
+
+    def test_gioi_han_toc_do(self):
+        sim = falling.FallSimulator(max_speed=10.0)
+        for _ in range(50):
+            sim.next_y(0, 100, 100000)
+        self.assertLessEqual(sim.speed, 10.0)
+
+    def test_reset_dua_toc_do_ve_ban_dau(self):
+        sim = falling.FallSimulator()
+        for _ in range(10):
+            sim.next_y(0, 100, 100000)
+        sim.reset()
+        self.assertEqual(sim.speed, sim.start_speed)
+
+    def test_near_ground(self):
+        # Pet cao 100, mat dat 600: day pet o 560 -> cach 40 px -> gan mat dat.
+        self.assertTrue(falling.near_ground(460, 100, 600, tolerance=60))
+        self.assertFalse(falling.near_ground(0, 100, 600, tolerance=60))
+
+
+class TestBehavior(unittest.TestCase):
+    """Pet tu quyet dinh di, nghi, ngu."""
+
+    def setUp(self):
+        self.machine = state_module.StateMachine()
+        self.behavior = behavior_module.Behavior(config=None)
+
+    def test_ngu_khi_khong_tuong_tac_lau(self):
+        self.behavior.note_interaction(0)
+        # Mac dinh ngu sau 120 giay.
+        changed = self.behavior.idle_tick(self.machine, 200_000)
+        self.assertTrue(changed)
+        self.assertEqual(self.machine.state, state_module.SLEEP)
+
+    def test_chua_du_lau_thi_chua_ngu(self):
+        self.behavior.note_interaction(0)
+        self.behavior.idle_tick(self.machine, 1000)
+        self.assertNotEqual(self.machine.state, state_module.SLEEP)
+
+    def test_che_do_tap_trung_khong_tu_di(self):
+        behavior = behavior_module.Behavior(config=_FakeConfig({"focus_mode": True}))
+        behavior.note_interaction(0)
+        for t in range(0, 20_000, 500):
+            behavior.idle_tick(self.machine, t)
+        self.assertNotEqual(
+            self.machine.state,
+            state_module.WALK,
+            "Che do tap trung thi khong duoc tu di",
+        )
+
+    def test_dang_bi_keo_thi_khong_ngu(self):
+        self.behavior.note_interaction(0)
+        self.machine.on_drag_start()
+        changed = self.behavior.idle_tick(self.machine, 999_999)
+        self.assertFalse(changed)
+        self.assertEqual(self.machine.state, state_module.DRAG)
+
+    def test_dang_roi_thi_khong_lam_gi_khac(self):
+        self.machine.on_drag_start()
+        self.machine.on_drag_release(near_ground=False)
+        self.behavior.note_interaction(0)
+        changed = self.behavior.idle_tick(self.machine, 999_999)
+        self.assertFalse(changed)
+        self.assertEqual(self.machine.state, state_module.FALL)
+
+    def test_di_roi_nghi(self):
+        """Mở app, pet tự đi rồi nghỉ - moc hoan thanh cua Giai doan 3."""
+        behavior = behavior_module.Behavior(
+            config=_FakeConfig({"auto_walk": True, "walk_speed": 2}),
+            rng=random.Random(1),
+        )
+        behavior.note_interaction(0)
+        # Lan tick dau chot moc khoi dong va dat thoi gian nghi ngan.
+        self.assertFalse(
+            behavior.idle_tick(self.machine, 0),
+            "Chua het thoi gian nghi thi chua di",
+        )
+        self.assertEqual(self.machine.state, state_module.IDLE)
+
+        # Het thoi gian nghi thi bat dau di (nhung chua du lau de ngu).
+        self.assertTrue(behavior.idle_tick(self.machine, 20_000))
+        self.assertEqual(self.machine.state, state_module.WALK)
+
+        # Sau khi di xong mot quang thi dung lai nghi.
+        self.assertTrue(behavior.walk_tick(self.machine, 40_000))
+        self.assertEqual(self.machine.state, state_module.IDLE)
+
+    def test_lan_dau_khong_ngu_ngay(self):
+        """Mo app lan dau: pet phai đi lai truoc, khong ngu ngay."""
+        behavior = behavior_module.Behavior(
+            config=_FakeConfig({"sleep_after_seconds": 120})
+        )
+        # Khong co tuong tac nao truoc do.
+        behavior.idle_tick(self.machine, 1000)
+        self.assertNotEqual(
+            self.machine.state,
+            state_module.SLEEP,
+            "Vua mo app ma da ngu la sai",
+        )
+
+    def test_click_ghi_nhan_tuong_tac(self):
+        self.behavior.note_interaction(0)
+        self.behavior.on_click(self.machine, 5000)
+        self.assertEqual(self.machine.state, state_module.REACT)
+        self.assertEqual(self.behavior.time_since_interaction(5000), 0)
+
+
+class _FakeConfig:
+    """Config gia de test Behavior ma khong can file that."""
+
+    def __init__(self, values):
+        self.values = values
+
+    def get(self, key, default=None):
+        return self.values.get(key, default)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

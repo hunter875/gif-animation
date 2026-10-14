@@ -30,7 +30,8 @@ DEFAULTS = {
     "animation_paused": False,
     "auto_switch_enabled": True,
     "auto_switch_seconds": 10,
-    "auto_walk": False,
+    # Bat san: moc cua Giai doan 3 la "mo app, pet tu di roi nghi".
+    "auto_walk": True,
     "click_through": False,
     "hide_on_fullscreen": True,
     "width_locked": True,

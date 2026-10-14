@@ -16,7 +16,9 @@ gif-animation/
 │   │   ├── gif_library.py      # chọn GIF hợp lệ, tính kích thước giữ tỉ lệ
 │   │   ├── pet_pack.py         # đọc nhân vật, fallback khi thiếu trạng thái
 │   │   ├── screen_utils.py     # giữ pet trong phạm vi màn hình
-│   │   └── state.py            # máy trạng thái (Giai đoạn 3) — ĐÃ CÓ
+│   │   ├── state.py            # máy trạng thái 7 trạng thái
+│   │   ├── behavior.py         # điều phối tự đi / nghỉ / ngủ
+│   │   └── falling.py          # mô phỏng rơi và tiếp đất
 │   │
 │   ├── ui/                     # giao diện PyQt5
 │   │   ├── pet_window.py       # cửa sổ pet, menu khay, phím tắt
@@ -41,8 +43,12 @@ gif-animation/
 │       └── sleep.gif
 │
 ├── tests/
-│   ├── test_core.py            # 67 test đơn vị
-│   └── test_acceptance.py      # 17 tiêu chí nghiệm thu
+│   ├── test_core.py            # 83 test đơn vị
+│   ├── test_acceptance.py      # 17 tiêu chí nghiệm thu
+│   └── test_phase3_flow.py     # 16 bước vòng đời Giai đoạn 3
+│
+├── tools/
+│   └── make_state_animations.py  # sinh fall/react/talk từ GIF gốc
 │
 ├── docs/
 │   └── ARCHITECTURE.md         # file này
@@ -86,9 +92,20 @@ còn `fall`/`react`/`talk` tự động fallback về `idle.gif`.
 File `pet.json` hỏng hoặc thiếu đều không làm app crash — dùng giá trị mặc định,
 và vẫn tự nhận các GIF có sẵn trong thư mục.
 
-## Máy trạng thái (Giai đoạn 3)
+## Máy trạng thái (Giai đoạn 3) — ĐÃ HOÀN THÀNH
 
-`gifpet/core/state.py` đã có sẵn logic và test, nhưng **chưa nối vào UI**.
+Ba module phối hợp:
+
+| Module | Vai trò |
+|---|---|
+| `state.py` | Máy trạng thái 7 trạng thái + quy tắc ưu tiên |
+| `behavior.py` | Quyết định tự đi / nghỉ / ngủ theo thời gian |
+| `falling.py` | Mô phỏng rơi nhanh dần và tiếp đất |
+
+`PetWindow` nối cả ba: mỗi 100 ms gọi `_behavior_tick()`, sự kiện chuột được
+chuyển thành sự kiện trạng thái, và mỗi lần đổi trạng thái thì đổi animation
+tương ứng.
+
 Bảy trạng thái: `idle`, `walk`, `drag`, `fall`, `sleep`, `react`, `talk`.
 
 Quy tắc ưu tiên đã được cài đặt và test:
@@ -100,8 +117,11 @@ Quy tắc ưu tiên đã được cài đặt và test:
 | Chế độ tập trung thì đứng yên hoặc ngủ | `set_focus_mode()` chặn `walk`, `fall` |
 | Đi tới cạnh màn hình thì quay đầu | `PetWindow._walk_step()` đảo `walk_direction` |
 
-Phần còn thiếu để hoàn thành Giai đoạn 3: nối `StateMachine` vào `PetWindow`,
-thêm animation rơi, và bắt sự kiện thả chuột giữa không trung.
+Phân biệt click và kéo: bấm rồi nhả mà **không** di chuyển quá 4 px là click
+(pet `react`); di chuyển xa hơn mới tính là kéo (pet `drag`).
+
+Vòng đời đầy đủ đã kiểm tra tự động trong `tests/test_phase3_flow.py`:
+mở app → tự đi → nghỉ → kéo → vùng vẫy → thả → rơi → tiếp đất → click → phản ứng.
 
 ## Cấu hình người dùng
 
@@ -158,7 +178,8 @@ Bắt đầu bằng "bấm để nói", **không** nghe mic liên tục — vì 
 
 ```bash
 ./run.sh              # chạy app
-./run.sh --test       # 67 test đơn vị
+./run.sh --test       # 83 test đơn vị
 ./run.sh --accept     # 17 tiêu chí nghiệm thu
+./run.sh --phase3     # 16 bước vòng đời Giai đoạn 3
 ./run.sh --headless   # khởi động không màn hình
 ```

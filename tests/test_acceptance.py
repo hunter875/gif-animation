@@ -43,8 +43,21 @@ def fresh_config():
 
 
 def press(window):
-    window.dragging = True
-    window.offset = QPoint(0, 0)
+    """Mo phong bam chuot trai de bat dau keo."""
+    start = window.pos()
+    window.mousePressEvent(
+        QMouseEvent(
+            QEvent.MouseButtonPress,
+            QPoint(0, 0),
+            start,
+            Qt.LeftButton,
+            Qt.LeftButton,
+            Qt.NoModifier,
+        )
+    )
+    # Danh dau da keo that, vi logic moi phan biet click va keo.
+    window._moved = True
+    window.behavior.on_drag_start(window.machine, window.now_ms())
 
 
 def release(window):
@@ -52,7 +65,7 @@ def release(window):
         QMouseEvent(
             QEvent.MouseButtonRelease,
             QPoint(0, 0),
-            QPoint(0, 0),
+            window.pos(),
             Qt.LeftButton,
             Qt.NoButton,
             Qt.NoModifier,
@@ -154,12 +167,13 @@ def counting_save():
 
 config.save = counting_save
 press(window)
-for step in range(100):
+start = window.pos()
+for step in range(1, 101):
     window.mouseMoveEvent(
         QMouseEvent(
             QEvent.MouseMove,
             QPoint(step, step),
-            QPoint(step, step),
+            QPoint(start.x() + step * 3, start.y() + step * 3),
             Qt.LeftButton,
             Qt.LeftButton,
             Qt.NoModifier,
@@ -309,12 +323,16 @@ window.quit_app()
 
 # --- Pet tu di ---
 config = fresh_config()
-config.data.update({"gif_path": "idle.gif", "gif_list": ["idle.gif"]})
+config.data.update(
+    {"gif_path": "idle.gif", "gif_list": ["idle.gif"], "auto_walk": True, "walk_speed": 4}
+)
 config.save()
 window = PetWindow(app, config)
 area = app.primaryScreen().availableGeometry()
 window.move(50, 100)
 start_x = window.x()
+# Vao trang thai walk truoc khi di (vong lap hanh vi lam viec nay trong app that).
+window.machine.request("walk", force=True)
 for _ in range(60):
     window._walk_step()
 still_inside = window.x() >= area.left() and window.x() + window.width() <= area.right() + 2
