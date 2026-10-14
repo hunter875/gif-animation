@@ -47,6 +47,13 @@ DEFAULTS = {
     "walk_pause_chance": 0.3,
     "sleep_after_seconds": 120,
     "gravity_enabled": True,
+    # --- Nhac tap trung / nghi (Pomodoro) ---
+    "pomodoro_enabled": False,
+    "pomodoro_focus_minutes": 25,
+    "pomodoro_break_minutes": 5,
+    "pomodoro_bubble": True,
+    "pomodoro_notify": True,
+    "pomodoro_checkin": True,
     # --- Giai doan 4: AI (tat mac dinh, chua trien khai) ---
     "ai_enabled": False,
     "ai_provider": "groq",

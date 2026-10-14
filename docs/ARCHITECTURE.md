@@ -18,12 +18,14 @@ gif-animation/
 │   │   ├── screen_utils.py     # giữ pet trong phạm vi màn hình
 │   │   ├── state.py            # máy trạng thái 7 trạng thái
 │   │   ├── behavior.py         # điều phối tự đi / nghỉ / ngủ
-│   │   └── falling.py          # mô phỏng rơi và tiếp đất
+│   │   ├── falling.py          # mô phỏng rơi và tiếp đất
+│   │   └── pomodoro.py         # nhắc tập trung / nghỉ (uống nước, nghỉ mắt)
 │   │
 │   ├── ui/                     # giao diện PyQt5
 │   │   ├── pet_window.py       # cửa sổ pet, menu khay, phím tắt
 │   │   ├── dialogs.py          # dialog resize và cài đặt
-│   │   └── gif_library_dialog.py  # thư viện GIF có thumbnail
+│   │   ├── gif_library_dialog.py  # thư viện GIF có thumbnail
+│   │   └── speech_bubble.py    # bong bóng thoại của pet
 │   │
 │   ├── assets/                 # tài nguyên tĩnh
 │   │   └── app_icon.ico
@@ -44,6 +46,7 @@ gif-animation/
 │
 ├── tests/
 │   ├── test_core.py            # 83 test đơn vị
+│   ├── test_pomodoro.py        # 32 test nhắc tập trung / nghỉ
 │   ├── test_acceptance.py      # 17 tiêu chí nghiệm thu
 │   └── test_phase3_flow.py     # 16 bước vòng đời Giai đoạn 3
 │
@@ -140,6 +143,30 @@ Các key của Giai đoạn 3–5 đã được khai báo sẵn trong `DEFAULTS`
 tắt mặc định (`ai_enabled`, `voice_enabled`, ...), nên bật lên không phá cấu
 hình cũ.
 
+## Nhắc tập trung / nghỉ (Pomodoro)
+
+`gifpet/core/pomodoro.py` — logic thuần túy, không phụ thuộc Qt.
+
+Vòng lặp `FOCUS → BREAK → FOCUS …`. Hết giờ tập trung thì pet nhắc uống nước,
+đứng dậy vận động hoặc thư giãn mắt. Trong giờ tập trung pet **đứng yên**
+(không tự đi) để không làm phân tán; sang giờ nghỉ thì đi lại bình thường.
+
+| Trạng thái | Ý nghĩa |
+|---|---|
+| `idle` | Chưa bật |
+| `focus` | Đang trong giờ tập trung |
+| `break` | Đang trong giờ nghỉ |
+| `paused` | Người dùng tạm dừng đồng hồ |
+
+Lời nhắc hiện theo hai cách, đều tắt được trong Cài đặt: **bong bóng thoại**
+trên đầu pet (`gifpet/ui/speech_bubble.py`) và **thông báo khay hệ thống**.
+
+`announce()` là điểm vào chung — sau này AI (Giai đoạn 4) cũng gọi cùng
+phương thức này để pet nói.
+
+Tương tác với `focus_mode` thủ công: khi Pomodoro tắt, `focus_mode` do người
+dùng đặt vẫn được giữ; khi Pomodoro bật, giờ tập trung cũng khoá pet lại.
+
 ## Giai đoạn 4 — AI (chưa triển khai)
 
 Dự kiến trong `gifpet/ai/`:
@@ -178,7 +205,7 @@ Bắt đầu bằng "bấm để nói", **không** nghe mic liên tục — vì 
 
 ```bash
 ./run.sh              # chạy app
-./run.sh --test       # 83 test đơn vị
+./run.sh --test       # chạy tất cả test đơn vị
 ./run.sh --accept     # 17 tiêu chí nghiệm thu
 ./run.sh --phase3     # 16 bước vòng đời Giai đoạn 3
 ./run.sh --headless   # khởi động không màn hình

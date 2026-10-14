@@ -45,8 +45,16 @@ if ! "$VENV_DIR/bin/python" -c "import PyQt5" >/dev/null 2>&1; then
 fi
 
 if [ "$MODE" = "test" ]; then
-    exec env QT_QPA_PLATFORM=offscreen \
-        "$VENV_DIR/bin/python" "$SCRIPT_DIR/tests/test_core.py"
+    # Chay tat ca file test_*.py trong tests/.
+    status=0
+    for test_file in "$SCRIPT_DIR"/tests/test_*.py; do
+        name="$(basename "$test_file")"
+        echo "=== $name ==="
+        if ! env QT_QPA_PLATFORM=offscreen "$VENV_DIR/bin/python" "$test_file"; then
+            status=1
+        fi
+    done
+    exit $status
 fi
 
 if [ "$MODE" = "accept" ]; then

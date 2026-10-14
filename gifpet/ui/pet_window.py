@@ -39,11 +39,13 @@ from PyQt5.QtWidgets import (
 from gifpet.core import behavior as behavior_module
 from gifpet.core import falling
 from gifpet.core import gif_library, paths, pet_pack
+from gifpet.core import pomodoro as pomodoro_module
 from gifpet.core import screen_utils
 from gifpet.core import state as state_module
 from gifpet.core.config import Config
 from gifpet.ui.dialogs import ResizeDialog, SettingsDialog
 from gifpet.ui.gif_library_dialog import GifLibraryDialog
+from gifpet.ui.speech_bubble import SpeechBubble
 
 # Goc project: noi chua GIF di kem va thu muc pets/.
 BASE_DIR = paths.PROJECT_ROOT
@@ -54,6 +56,8 @@ WALK_STEP = 2
 BEHAVIOR_TICK_MS = 100
 # Nhip roi (ms) - nhanh hon de chuyen dong muot.
 FALL_TICK_MS = 30
+# Nhip kiem tra dong ho Pomodoro (ms).
+POMODORO_TICK_MS = 1000
 
 
 class PetWindow(QLabel):
@@ -84,6 +88,11 @@ class PetWindow(QLabel):
         self.fall_sim = falling.FallSimulator()
         self._state_until_ms = 0
         self._fall_ground_y = 0
+
+        # Nhac tap trung / nghi.
+        self.pomodoro = pomodoro_module.Pomodoro(self.config)
+        self.bubble = None
+        self._last_checkin_ms = 0
 
         self._restore_state()
         self._load_pack()
@@ -217,6 +226,15 @@ class PetWindow(QLabel):
         self.state_timer = QTimer(self)
         self.state_timer.setSingleShot(True)
         self.state_timer.timeout.connect(self._on_state_timeout)
+
+        # Dong ho tap trung / nghi.
+        self.pomodoro_timer = QTimer(self)
+        self.pomodoro_timer.timeout.connect(self._pomodoro_tick)
+        if self.config.get("pomodoro_enabled"):
+            self.pomodoro.start(self.now_ms())
+            self.pomodoro_timer.start(POMODORO_TICK_MS)
+            # Bat dau giua gio tap trung: pet phai dung yen ngay.
+            self._sync_focus_with_pomodoro()
 
         self.fullscreen_timer = QTimer(self)
         self.fullscreen_timer.timeout.connect(self._check_fullscreen)
@@ -358,6 +376,34 @@ class PetWindow(QLabel):
         self.action_sleep = QAction("Cho pet ngủ ngay", self)
         self.action_sleep.triggered.connect(self.send_to_sleep)
 
+        # --- Nhac tap trung / nghi ---
+        self.action_pomodoro = QAction("Nhắc tập trung / nghỉ", self, checkable=True)
+        self.action_pomodoro.setToolTip("Pomodoro: nhắc uống nước và thư giãn mắt")
+        self.action_pomodoro.triggered.connect(self.toggle_pomodoro)
+
+        self.pomodoro_menu = QMenu("Đồng hồ tập trung", self)
+        self.action_pomodoro_status = QAction("Chưa bật", self)
+        self.action_pomodoro_status.setEnabled(False)
+
+        self.action_pomodoro_pause = QAction("Tạm dừng đồng hồ", self)
+        self.action_pomodoro_pause.triggered.connect(self.pomodoro_pause)
+
+        self.action_pomodoro_resume = QAction("Chạy tiếp", self)
+        self.action_pomodoro_resume.triggered.connect(self.pomodoro_resume)
+
+        self.action_pomodoro_skip = QAction("Bỏ qua, sang pha tiếp", self)
+        self.action_pomodoro_skip.triggered.connect(self.pomodoro_skip)
+
+        self.action_pomodoro_remind = QAction("Nhắc uống nước ngay", self)
+        self.action_pomodoro_remind.triggered.connect(self.remind_now)
+
+        self.pomodoro_menu.addAction(self.action_pomodoro_status)
+        self.pomodoro_menu.addSeparator()
+        self.pomodoro_menu.addAction(self.action_pomodoro_pause)
+        self.pomodoro_menu.addAction(self.action_pomodoro_resume)
+        self.pomodoro_menu.addAction(self.action_pomodoro_skip)
+        self.pomodoro_menu.addAction(self.action_pomodoro_remind)
+
         self.action_click_through = QAction("Click xuyên qua pet", self, checkable=True)
         self.action_click_through.triggered.connect(self.toggle_click_through)
 
@@ -391,6 +437,10 @@ class PetWindow(QLabel):
         self.menu.addAction(self.action_walk)
         self.menu.addAction(self.action_focus)
         self.menu.addAction(self.action_sleep)
+        self.menu.addSeparator()
+        self.menu.addAction(self.action_pomodoro)
+        self.menu.addMenu(self.pomodoro_menu)
+        self.menu.addSeparator()
         self.menu.addAction(self.action_click_through)
         self.menu.addAction(self.action_hide_fullscreen)
         self.menu.addAction(self.action_pin)
@@ -415,12 +465,27 @@ class PetWindow(QLabel):
         self.action_walk.setChecked(bool(self.config.get("auto_walk")))
         self.action_focus.setChecked(bool(self.config.get("focus_mode")))
         self.action_sleep.setEnabled(self.machine.can_sleep())
+
+        # Trang thai dong ho tap trung.
+        self.action_pomodoro.setChecked(bool(self.config.get("pomodoro_enabled")))
+        self.action_pomodoro_status.setText(self.pomodoro_status())
+        active = self.config.get("pomodoro_enabled")
+        self.pomodoro_menu.setEnabled(True)
+        self.action_pomodoro_pause.setEnabled(
+            active and self.pomodoro.phase in ("focus", "break")
+        )
+        self.action_pomodoro_resume.setEnabled(
+            active and self.pomodoro.phase == "paused"
+        )
+        self.action_pomodoro_skip.setEnabled(active)
         self.action_click_through.setChecked(bool(self.config.get("click_through")))
         self.action_pin.setChecked(bool(self.config.get("pin_to_top")))
         self.action_hide_fullscreen.setChecked(bool(self.config.get("hide_on_fullscreen")))
 
     def _popup_menu(self, position):
         self._sync_menu()
+        # Cap nhat dong ho ngay truoc khi hien, de dem nguoc dung.
+        self.action_pomodoro_status.setText(self.pomodoro_status())
         self.menu.exec_(position)
 
     def _on_tray_activated(self, reason):
@@ -649,6 +714,9 @@ class PetWindow(QLabel):
 
         if self._moved:
             self.move(event.globalPos() - self.offset)
+            # Bong bong thoai di theo pet.
+            if self.bubble is not None and self.bubble.isVisible():
+                self.bubble._place_above(self.frameGeometry())
 
     def mouseReleaseEvent(self, event):
         """Tha chuot: luu vi tri, va quyet dinh roi hay dung yen."""
@@ -890,6 +958,111 @@ class PetWindow(QLabel):
         return "_NET_WM_STATE_FULLSCREEN" in state
 
     # ------------------------------------------------------------------
+    # Nhac tap trung / nghi (Pomodoro)
+    # ------------------------------------------------------------------
+    def _pomodoro_tick(self):
+        """Kiem tra dong ho moi giay, nhic khi chuyen pha."""
+        if not self.config.get("pomodoro_enabled"):
+            return
+        message = self.pomodoro.tick(self.now_ms())
+        if message:
+            # Chuyen pha: cap nhat lai trang thai dung yen / di lai.
+            self._sync_focus_with_pomodoro()
+            self.announce(message, duration_ms=9000)
+
+    def announce(self, message, duration_ms=6000):
+        """Cho pet noi mot cau: hien bong bong thoai va thong bao khay.
+
+        Sau nay AI co the goi cung phuong thuc nay.
+        """
+        if not message:
+            return
+        if self.config.get("pomodoro_bubble", True):
+            self._show_bubble(message, duration_ms)
+        if self.config.get("pomodoro_notify", True) and self.tray is not None:
+            self.tray.showMessage("GIF Pet", message, QSystemTrayIcon.Information, 5000)
+        print(f"[nói] {message}")
+
+    def _show_bubble(self, message, duration_ms):
+        """Hien bong bong thoai tren dau pet."""
+        if self.bubble is None:
+            self.bubble = SpeechBubble()
+        # Dung chinh kich thuoc cua so pet lam moc.
+        self.bubble.say_above(message, self.frameGeometry(), duration_ms)
+
+    def toggle_pomodoro(self):
+        """Bat/tat che do nhac tap trung / nghi."""
+        enabled = not bool(self.config.get("pomodoro_enabled"))
+        self.config.data["pomodoro_enabled"] = enabled
+        if enabled:
+            message = self.pomodoro.start(self.now_ms())
+            self.pomodoro_timer.start(POMODORO_TICK_MS)
+            self.announce(message, duration_ms=6000)
+        else:
+            message = self.pomodoro.stop()
+            self.pomodoro_timer.stop()
+            self.announce(message, duration_ms=4000)
+        # Tap trung thi pet dung yen.
+        self._sync_focus_with_pomodoro()
+        self.config.save()
+
+    def _sync_focus_with_pomodoro(self):
+        """Trong gio tap trung thi pet dung yen, gio nghi thi di lai.
+
+        Khi Pomodoro tat, tra quyen kiem soat lai cho che do tap trung thu cong:
+        nguoi dung van co the tu bat ``focus_mode`` trong Cai dat hoac menu.
+        """
+        if not self.config.get("pomodoro_enabled"):
+            # Nha chan cua Pomodoro, nhung giu che do tap trung thu cong.
+            manual_focus = bool(self.config.get("focus_mode"))
+            self.machine.set_focus_mode(manual_focus)
+            return
+
+        # Trong gio tap trung, hoac nguoi dung tu bat focus_mode.
+        focusing = self.pomodoro.is_focusing() or bool(self.config.get("focus_mode"))
+        self.machine.set_focus_mode(focusing)
+        if focusing and self.machine.state == state_module.WALK:
+            self.behavior.stop_walking(self.machine, self.now_ms())
+        elif not focusing and self.machine.state == state_module.IDLE:
+            # Vua het gio tap trung: cho pet nghi mot chut roi di lai.
+            self.behavior.note_interaction(self.now_ms())
+
+    def pomodoro_pause(self):
+        if self.pomodoro.pause(self.now_ms()):
+            self.announce("Đã tạm dừng đồng hồ.", duration_ms=3000)
+            self.config.save()
+            return True
+        return False
+
+    def pomodoro_resume(self):
+        if self.pomodoro.resume(self.now_ms()):
+            self._sync_focus_with_pomodoro()
+            self.announce(
+                f"Chạy tiếp: {self.pomodoro.status_text(self.now_ms())}",
+                duration_ms=3000,
+            )
+            return True
+        return False
+
+    def pomodoro_skip(self):
+        """Bo qua pha hien tai."""
+        if self.pomodoro.skip(self.now_ms()):
+            self._sync_focus_with_pomodoro()
+            self.announce(self.pomodoro.last_reminder, duration_ms=6000)
+            return True
+        return False
+
+    def remind_now(self):
+        """Nhac uong nuoc / thu gian mat ngay lap tuc."""
+        message = self.pomodoro.random_break_reminder()
+        self.announce(message, duration_ms=7000)
+        return message
+
+    def pomodoro_status(self):
+        """Chuoi trang thai de hien trong menu."""
+        return self.pomodoro.status_text(self.now_ms())
+
+    # ------------------------------------------------------------------
     # Dialog
     # ------------------------------------------------------------------
     def open_library(self):
@@ -946,8 +1119,21 @@ class PetWindow(QLabel):
         if focus_changed:
             # Ap dung che do tap trung qua may trang thai.
             self.machine.set_focus_mode(values["focus_mode"])
+        self._apply_pomodoro_settings()
         self._apply_switch_timer()
         self._apply_walk_timer()
+
+    def _apply_pomodoro_settings(self):
+        """Bat/tat dong ho theo cai dat moi."""
+        enabled = bool(self.config.get("pomodoro_enabled"))
+        if enabled and not self.pomodoro_timer.isActive():
+            self.pomodoro.start(self.now_ms())
+            self.pomodoro_timer.start(POMODORO_TICK_MS)
+            self.announce(self.pomodoro.last_reminder or "Bắt đầu tập trung.", 6000)
+        elif not enabled and self.pomodoro_timer.isActive():
+            self.pomodoro_timer.stop()
+            self.pomodoro.stop()
+        self._sync_focus_with_pomodoro()
 
     def _apply_pin(self, pinned, persist=True):
         flags = self.windowFlags()
@@ -997,6 +1183,8 @@ class PetWindow(QLabel):
     # ------------------------------------------------------------------
     def quit_app(self):
         self.config.save()
+        if self.bubble is not None:
+            self.bubble.hide()
         if self.tray is not None:
             self.tray.hide()
         self.app.quit()

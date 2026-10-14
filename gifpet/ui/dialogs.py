@@ -133,6 +133,31 @@ class SettingsDialog(QDialog):
         self.sleep_after.setValue(max(5, int(config.get("sleep_after_seconds", 120))))
         form.addRow("Ngủ sau khi rảnh:", self.sleep_after)
 
+        # --- Nhac tap trung / nghi ---
+        self.pomodoro = QCheckBox("Nhắc tập trung / nghỉ", self)
+        self.pomodoro.setChecked(bool(config.get("pomodoro_enabled")))
+        form.addRow(self.pomodoro)
+
+        self.pomodoro_focus = QSpinBox(self)
+        self.pomodoro_focus.setRange(1, 180)
+        self.pomodoro_focus.setSuffix(" phút")
+        self.pomodoro_focus.setValue(max(1, int(config.get("pomodoro_focus_minutes", 25))))
+        form.addRow("Thời gian tập trung:", self.pomodoro_focus)
+
+        self.pomodoro_break = QSpinBox(self)
+        self.pomodoro_break.setRange(1, 60)
+        self.pomodoro_break.setSuffix(" phút")
+        self.pomodoro_break.setValue(max(1, int(config.get("pomodoro_break_minutes", 5))))
+        form.addRow("Thời gian nghỉ:", self.pomodoro_break)
+
+        self.pomodoro_bubble = QCheckBox("Hiện lời nhắc trong bong bóng thoại", self)
+        self.pomodoro_bubble.setChecked(bool(config.get("pomodoro_bubble", True)))
+        form.addRow(self.pomodoro_bubble)
+
+        self.pomodoro_notify = QCheckBox("Hiện thông báo khay hệ thống", self)
+        self.pomodoro_notify.setChecked(bool(config.get("pomodoro_notify", True)))
+        form.addRow(self.pomodoro_notify)
+
         self.click_through = QCheckBox("Click xuyên qua pet", self)
         self.click_through.setChecked(bool(config.get("click_through")))
         form.addRow(self.click_through)
@@ -150,7 +175,9 @@ class SettingsDialog(QDialog):
         note = QLabel(
             "Khi bật “Click xuyên qua pet”, chuột sẽ không bấm được vào pet. "
             "Dùng khay hệ thống hoặc phím tắt để tắt lại.\n\n"
-            "“Chế độ tập trung” giữ pet đứng yên hoặc ngủ, không tự đi lại.",
+            "“Chế độ tập trung” giữ pet đứng yên hoặc ngủ, không tự đi lại.\n\n"
+            "“Nhắc tập trung / nghỉ” là Pomodoro: hết giờ tập trung pet sẽ nhắc "
+            "uống nước, thư giãn mắt. Trong giờ tập trung pet đứng yên.",
             self,
         )
         note.setWordWrap(True)
@@ -170,6 +197,11 @@ class SettingsDialog(QDialog):
             "walk_speed": self.walk_speed.value(),
             "walk_pause_chance": self.walk_pause.value() / 100.0,
             "sleep_after_seconds": self.sleep_after.value(),
+            "pomodoro_enabled": self.pomodoro.isChecked(),
+            "pomodoro_focus_minutes": self.pomodoro_focus.value(),
+            "pomodoro_break_minutes": self.pomodoro_break.value(),
+            "pomodoro_bubble": self.pomodoro_bubble.isChecked(),
+            "pomodoro_notify": self.pomodoro_notify.isChecked(),
             "click_through": self.click_through.isChecked(),
             "hide_on_fullscreen": self.hide_fullscreen.isChecked(),
             "pin_to_top": self.pin.isChecked(),

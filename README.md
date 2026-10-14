@@ -30,9 +30,17 @@ Chạy được trên Linux, Windows và macOS.
 - **Chế độ tập trung**: pet đứng yên hoặc ngủ, không tự đi lại.
 - Tốc độ tự đi, tần suất nghỉ và thời gian ngủ chỉnh được trong Cài đặt.
 
+**Nhắc tập trung / nghỉ (Pomodoro)**
+- Bật trong menu khay hoặc Cài đặt. Mặc định 25 phút tập trung, 5 phút nghỉ.
+- Hết giờ tập trung pet nhắc: uống nước, đứng dậy vận động, thư giãn mắt.
+- Trong giờ tập trung pet **đứng yên**; sang giờ nghỉ thì đi lại bình thường.
+- Lời nhắc hiện trong bong bóng thoại trên đầu pet và/hoặc thông báo khay.
+- Có nút tạm dừng, chạy tiếp, bỏ qua pha, và "Nhắc uống nước ngay".
+
 **Khay hệ thống**
 Menu khay gồm: hiện/ẩn pet, tạm dừng animation, tự động đổi GIF, pet tự đi,
-chế độ tập trung, cho pet ngủ ngay, click xuyên qua pet, ẩn khi fullscreen,
+chế độ tập trung, cho pet ngủ ngay, nhắc tập trung/nghỉ (Pomodoro),
+click xuyên qua pet, ẩn khi fullscreen,
 luôn nổi trên cùng, thư viện GIF, chỉnh kích thước, đưa về giữa màn hình,
 cài đặt và thoát.
 
@@ -111,11 +119,14 @@ Cấu trúc:
 | `gifpet/core/state.py` | Máy trạng thái 7 trạng thái |
 | `gifpet/core/behavior.py` | Điều phối tự đi / nghỉ / ngủ |
 | `gifpet/core/falling.py` | Mô phỏng rơi và tiếp đất |
+| `gifpet/core/pomodoro.py` | Nhắc tập trung / nghỉ |
+| `gifpet/ui/speech_bubble.py` | Bong bóng thoại của pet |
 | `gifpet/ui/pet_window.py` | Cửa sổ pet, menu khay, phím tắt |
 | `gifpet/ui/dialogs.py` | Dialog resize và cài đặt |
 | `gifpet/ui/gif_library_dialog.py` | Dialog thư viện GIF có thumbnail |
 | `pets/<tên>/pet.json` | Mô tả nhân vật: kích thước, tốc độ, tính cách |
 | `tests/test_core.py` | 83 test đơn vị |
+| `tests/test_pomodoro.py` | 32 test nhắc tập trung / nghỉ |
 | `tests/test_acceptance.py` | 17 tiêu chí nghiệm thu |
 | `tests/test_phase3_flow.py` | 16 bước vòng đời Giai đoạn 3 |
 | `tools/make_state_animations.py` | Sinh animation trạng thái còn thiếu |
@@ -124,7 +135,7 @@ Cấu trúc:
 Chạy test:
 
 ```bash
-./run.sh --test      # 83 test đơn vị
+./run.sh --test      # tất cả test đơn vị (83 + 32)
 ./run.sh --accept    # 17 tiêu chí nghiệm thu
 ./run.sh --phase3    # 16 bước vòng đời Giai đoạn 3
 # hoặc
