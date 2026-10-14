@@ -23,8 +23,10 @@ APP_NAME = "GifAnimation"
 #   - Giong noi           : Giai doan 5 (STT, TTS)
 DEFAULTS = {
     # --- Hien thi va vi tri ---
-    "x": 0,
-    "y": 0,
+    # -1 nghia la "chua dat": lan chay dau se tu chon cho ngoi hop ly
+    # (goc duoi-trai man hinh), du cho bong bong thoai hien phia tren.
+    "x": -1,
+    "y": -1,
     "pin_to_top": True,
     "visible": True,
     "animation_paused": False,

@@ -9,8 +9,10 @@ Cua so nay khong nhan chuot (WA_TransparentForMouseEvents) de khong chan pet.
 from PyQt5.QtCore import QPoint, Qt, QTimer
 from PyQt5.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-# Kich thuoc toi da cua bong bong truoc khi xuong dong.
-MAX_WIDTH = 340
+# Kich thuoc bong bong.
+MAX_WIDTH = 340   # rong toi da truoc khi xuong dong
+MIN_WIDTH = 120   # rong toi thieu, tranh bong bong qua hep
+PADDING_X = 14    # phai khop padding ngang trong STYLE
 
 STYLE = """
 QLabel {
@@ -37,7 +39,7 @@ class SpeechBubble(QWidget):
         self.label = QLabel("", self)
         self.label.setStyleSheet(STYLE)
         self.label.setWordWrap(True)
-        self.label.setMaximumWidth(MAX_WIDTH)
+        # Chieu rong duoc dat trong _resize_for_text().
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -55,7 +57,7 @@ class SpeechBubble(QWidget):
         if not text:
             return
         self.label.setText(text)
-        self.adjustSize()
+        self._resize_for_text()
 
         if anchor is not None:
             self._place_above(anchor)
@@ -63,6 +65,24 @@ class SpeechBubble(QWidget):
         self.show()
         self.raise_()
         self.hide_timer.start(max(1000, int(duration_ms)))
+
+    def _resize_for_text(self):
+        """Chon kich thuoc vua du, nhung uu tien dung chieu rong cho phep.
+
+        ``adjustSize()`` mot minh se chon chieu rong nho nhat co the, lam bong
+        bong cao va hep bat tien. Thay vao do: do chieu rong chuoi tren mot
+        dong, roi kep vao khoang [MIN_WIDTH, MAX_WIDTH].
+        """
+        metrics = self.label.fontMetrics()
+        single_line = metrics.boundingRect(self.label.text()).width()
+
+        # Cong them padding cua stylesheet (14px moi ben) va vien.
+        wanted = single_line + 2 * PADDING_X + 2
+        width = max(MIN_WIDTH, min(MAX_WIDTH, wanted))
+
+        self.label.setFixedWidth(width)
+        self.label.adjustSize()
+        self.adjustSize()
 
     def _place_above(self, anchor):
         """Dat bong bong ngay tren pet, keo vao trong man hinh neu tran."""

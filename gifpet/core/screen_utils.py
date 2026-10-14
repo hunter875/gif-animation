@@ -69,3 +69,25 @@ def center_on_primary(app, width, height):
     if screen is None:
         return 0, 0
     return center_in(QRect(screen.availableGeometry()), width, height)
+
+
+def default_position(app, width, height, margin=40):
+    """Cho ngoi ban dau cho pet: goc duoi-trai man hinh chinh.
+
+    Chon goc duoi-trai vi do la cho desktop pet thuong dung, va quan trong hon:
+    con du cho phia tren de hien bong bong thoai.
+    """
+    screen = app.primaryScreen()
+    if screen is None:
+        return 0, 0
+    area = QRect(screen.availableGeometry())
+    width = max(1, int(width))
+    height = max(1, int(height))
+
+    x = area.left() + margin
+    y = area.bottom() - height - margin
+
+    # Man hinh qua nho: kep lai cho vua.
+    x = max(area.left(), min(x, area.right() - width))
+    y = max(area.top(), min(y, area.bottom() - height))
+    return x, y

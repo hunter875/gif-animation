@@ -650,15 +650,25 @@ class PetWindow(QLabel):
         """Dat pet dung cho, keo ve man hinh chinh neu toa do da luu bi lac."""
         width = max(1, self.width())
         height = max(1, self.height())
-        x = int(self.config.get("x", 0))
-        y = int(self.config.get("y", 0))
+        x = int(self.config.get("x", -1))
+        y = int(self.config.get("y", -1))
 
-        safe_x, safe_y = screen_utils.ensure_visible(self.app, x, y, width, height)
-        if (safe_x, safe_y) != (x, y):
-            print(f"Tọa độ đã lưu ({x}, {y}) nằm ngoài màn hình, đưa về ({safe_x}, {safe_y}).")
+        # Chua tung dat cho: chon vi tri ban dau hop ly.
+        if x < 0 or y < 0:
+            safe_x, safe_y = screen_utils.default_position(self.app, width, height)
             self.config.data["x"] = safe_x
             self.config.data["y"] = safe_y
             self.config.save()
+        else:
+            safe_x, safe_y = screen_utils.ensure_visible(self.app, x, y, width, height)
+            if (safe_x, safe_y) != (x, y):
+                print(
+                    f"Tọa độ đã lưu ({x}, {y}) nằm ngoài màn hình, "
+                    f"đưa về ({safe_x}, {safe_y})."
+                )
+                self.config.data["x"] = safe_x
+                self.config.data["y"] = safe_y
+                self.config.save()
         self.move(safe_x, safe_y)
 
         if self.config.get("click_through"):
