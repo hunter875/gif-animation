@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 
-from gif_library import scaled_size
+from gifpet.core.gif_library import scaled_size
 
 
 class ResizeDialog(QDialog):

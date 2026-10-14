@@ -15,7 +15,14 @@ import tempfile
 APP_NAME = "GifAnimation"
 
 # Cac key cau hinh va kieu du lieu mong doi, dung de validate khi doc.
+#
+# Nhom theo giai doan de de mo rong:
+#   - Hien thi / vi tri   : Giai doan 1-2 (da xong)
+#   - Nhan vat va hanh vi : Giai doan 3 (trang thai, tu di, nem tha)
+#   - AI                  : Giai doan 4 (chat, tinh cach, bo nho, quota)
+#   - Giong noi           : Giai doan 5 (STT, TTS)
 DEFAULTS = {
+    # --- Hien thi va vi tri ---
     "x": 0,
     "y": 0,
     "pin_to_top": True,
@@ -26,11 +33,30 @@ DEFAULTS = {
     "auto_walk": False,
     "click_through": False,
     "hide_on_fullscreen": True,
-    "gif_path": "abc.gif",
+    "width_locked": True,
+    # --- Nhan vat ---
+    "pet_pack": "default",
+    "gif_path": "idle.gif",
     "gif_width": 200,
     "gif_height": 200,
-    "width_locked": True,
-    "gif_list": ["abc.gif"],
+    "gif_list": [],
+    # --- Giai doan 3: hanh vi ---
+    "focus_mode": False,
+    "walk_speed": 2,
+    "walk_pause_chance": 0.3,
+    "sleep_after_seconds": 120,
+    "gravity_enabled": True,
+    # --- Giai doan 4: AI (tat mac dinh, chua trien khai) ---
+    "ai_enabled": False,
+    "ai_provider": "groq",
+    "ai_model": "",
+    "ai_daily_limit": 50,
+    "ai_used_today": 0,
+    "ai_used_date": "",
+    "ai_proactive": False,
+    # --- Giai doan 5: giong noi (tat mac dinh, chua trien khai) ---
+    "voice_enabled": False,
+    "voice_muted": True,
 }
 
 

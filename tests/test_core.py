@@ -1,11 +1,12 @@
 """Test cho cac module logic cua GIF Pet.
 
-Chay: QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/ -v
-Hoac:  QT_QPA_PLATFORM=offscreen .venv/bin/python tests/test_pet.py
+Chay: ./run.sh --test
+Hoac: QT_QPA_PLATFORM=offscreen .venv/bin/python tests/test_core.py
 """
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -16,15 +17,20 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtWidgets import QApplication  # noqa: E402
 
-import gif_library  # noqa: E402
-import screen_utils  # noqa: E402
-from config import DEFAULTS, Config  # noqa: E402
+from gifpet.core import gif_library  # noqa: E402
+from gifpet.core import pet_pack  # noqa: E402
+from gifpet.core import screen_utils  # noqa: E402
+from gifpet.core import state as state_module  # noqa: E402
+from gifpet.core.config import DEFAULTS, Config  # noqa: E402
+from gifpet.core.paths import PETS_DIR, PROJECT_ROOT  # noqa: E402
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = PROJECT_ROOT
 _app = QApplication.instance() or QApplication([])
 
-VALID_GIF = os.path.join(BASE_DIR, "abc.gif")
-NON_SQUARE_GIF = VALID_GIF  # abc.gif la 500x667
+DEFAULT_PACK_DIR = os.path.join(PETS_DIR, "default")
+VALID_GIF = os.path.join(DEFAULT_PACK_DIR, "idle.gif")
+# Cac GIF nam trong thu muc nhan vat, khong phai goc project.
+GIF_BASE = DEFAULT_PACK_DIR
 
 
 class TestScaledSize(unittest.TestCase):
@@ -85,48 +91,48 @@ class TestGifLibrary(unittest.TestCase):
 
     def test_uu_tien_gif_da_chon(self):
         resolved, stored = gif_library.pick_working_gif(
-            "abc.gif", ["abc.gif", "GTwNX-QXwAA0stR.gif"], BASE_DIR
+            "idle.gif", ["idle.gif", "drag.gif"], GIF_BASE
         )
-        self.assertTrue(resolved.endswith("abc.gif"))
+        self.assertTrue(resolved.endswith("idle.gif"))
 
     def test_file_mat_thi_chon_gif_khac(self):
         """Xoa file dang chon -> van phai tim duoc GIF hop le khac."""
         resolved, stored = gif_library.pick_working_gif(
-            "da-bi-xoa.gif", ["da-bi-xoa.gif", "GTwNX-QXwAA0stR.gif"], BASE_DIR
+            "da-bi-xoa.gif", ["da-bi-xoa.gif", "drag.gif"], GIF_BASE
         )
         self.assertIsNotNone(resolved, "Phai fallback sang GIF con dung duoc")
-        self.assertTrue(resolved.endswith("GTwNX-QXwAA0stR.gif"))
+        self.assertTrue(resolved.endswith("drag.gif"))
 
     def test_duong_dan_windows_khong_lam_crash(self):
         resolved, stored = gif_library.pick_working_gif(
-            "D:/pythonone/nice one/gg/abc.gif", ["abc.gif"], BASE_DIR
+            "D:/pythonone/nice one/gg/abc.gif", ["idle.gif"], GIF_BASE
         )
         self.assertIsNotNone(resolved)
-        self.assertTrue(resolved.endswith("abc.gif"))
+        self.assertTrue(resolved.endswith("idle.gif"))
 
     def test_khong_con_gif_nao_thi_tra_ve_none(self):
         resolved, stored = gif_library.pick_working_gif(
-            "hong.gif", ["hong.gif"], BASE_DIR, default="cung-hong.gif"
+            "hong.gif", ["hong.gif"], GIF_BASE, default="cung-hong.gif"
         )
         self.assertIsNone(resolved)
 
     def test_existing_entries_loc_file_hong(self):
-        entries = ["abc.gif", "khong-ton-tai.gif", "GTwNX-QXwAA0stR.gif"]
-        result = gif_library.existing_entries(entries, BASE_DIR)
-        self.assertEqual(result, ["abc.gif", "GTwNX-QXwAA0stR.gif"])
+        entries = ["idle.gif", "khong-ton-tai.gif", "drag.gif"]
+        result = gif_library.existing_entries(entries, GIF_BASE)
+        self.assertEqual(result, ["idle.gif", "drag.gif"])
 
     def test_resolve_duong_dan_tuong_doi_theo_project(self):
-        resolved = gif_library.resolve_path("abc.gif", BASE_DIR)
-        self.assertEqual(resolved, os.path.join(BASE_DIR, "abc.gif"))
+        resolved = gif_library.resolve_path("idle.gif", GIF_BASE)
+        self.assertEqual(resolved, os.path.join(GIF_BASE, "idle.gif"))
 
     def test_resolve_giu_duong_dan_tuyet_doi(self):
         self.assertEqual(
-            gif_library.resolve_path("/tmp/x.gif", BASE_DIR), "/tmp/x.gif"
+            gif_library.resolve_path("/tmp/x.gif", GIF_BASE), "/tmp/x.gif"
         )
 
     def test_normalize_dua_ve_tuong_doi(self):
-        absolute = os.path.join(BASE_DIR, "abc.gif")
-        self.assertEqual(gif_library.normalize_path(absolute, BASE_DIR), "abc.gif")
+        absolute = os.path.join(GIF_BASE, "idle.gif")
+        self.assertEqual(gif_library.normalize_path(absolute, GIF_BASE), "idle.gif")
 
 
 class TestConfig(unittest.TestCase):
@@ -252,14 +258,15 @@ class TestOriginalSizeNotPolluted(unittest.TestCase):
         self.assertEqual(gif_library.gif_dimensions(VALID_GIF), (500, 667))
 
     def test_kich_thuoc_goc_khong_doi_sau_resize(self):
-        from transparent_window import TransparentWindow
+        from gifpet.ui.pet_window import PetWindow
 
         temp_dir = tempfile.mkdtemp()
         config = Config(os.path.join(temp_dir, "config.json"))
+        idle = os.path.join(DEFAULT_PACK_DIR, "idle.gif")
         config.data.update(
-            {"gif_path": "abc.gif", "gif_list": ["abc.gif"], "gif_width": 250}
+            {"gif_path": idle, "gif_list": [idle], "gif_width": 250}
         )
-        window = TransparentWindow(_app, config)
+        window = PetWindow(_app, config)
         self.assertEqual(window.original_size(), (500, 667))
 
         # Sau khi scale, kich thuoc goc van phai la 500x667.
@@ -272,27 +279,25 @@ class TestOriginalSizeNotPolluted(unittest.TestCase):
         window.quit_app()
 
     def test_ti_le_on_dinh_qua_nhieu_lan_resize(self):
-        from transparent_window import TransparentWindow
+        """Nhieu lan resize lien tiep van giu dung ti le cua GIF dang hien."""
+        from gifpet.ui.pet_window import PetWindow
 
         temp_dir = tempfile.mkdtemp()
         config = Config(os.path.join(temp_dir, "config.json"))
-        config.data.update(
-            {
-                "gif_path": "GTwNX-QXwAA0stR.gif",
-                "gif_list": ["GTwNX-QXwAA0stR.gif"],
-                "gif_width": 200,
-                "width_locked": True,
-            }
-        )
-        window = TransparentWindow(_app, config)
-        original_ratio = 864 / 648
+        config.data.update({"gif_width": 200, "width_locked": True})
+        window = PetWindow(_app, config)
+
+        # Kich thuoc goc lay tu GIF that dang hien thi (qua pet pack).
+        original_width, original_height = window.original_size()
+        self.assertGreater(original_width, 1)
+        original_ratio = original_width / original_height
 
         for target in [200, 400, 150, 600, 100]:
             config.data["gif_width"] = target
             window._refit_to_current_movie()
-            # Lam tron chieu cao sang pixel nguyen nen dung sai toi da 1px.
-            expected_height = round(648 * target / 864)
+            expected_height = round(original_height * target / original_width)
             self.assertEqual(window.width(), target)
+            # Lam tron sang pixel nguyen nen dung sai toi da 1px.
             self.assertLessEqual(
                 abs(window.height() - expected_height),
                 1,
@@ -311,12 +316,12 @@ class TestMouseMoveDoesNotWrite(unittest.TestCase):
     """Loi chinh cua ban goc: mouseMoveEvent ghi JSON moi lan di chuyen."""
 
     def test_keo_pet_khong_ghi_file_lien_tuc(self):
-        from transparent_window import TransparentWindow
+        from gifpet.ui.pet_window import PetWindow
 
         temp_dir = tempfile.mkdtemp()
         config_path = os.path.join(temp_dir, "config.json")
         config = Config(config_path)
-        window = TransparentWindow(_app, config)
+        window = PetWindow(_app, config)
 
         save_calls = []
         original_save = config.save
@@ -372,9 +377,9 @@ class TestAnimationPauseSeparate(unittest.TestCase):
         self.config = Config(os.path.join(self.temp_dir, "config.json"))
 
     def test_pause_khong_tat_auto_switch_setting(self):
-        from transparent_window import TransparentWindow
+        from gifpet.ui.pet_window import PetWindow
 
-        window = TransparentWindow(_app, self.config)
+        window = PetWindow(_app, self.config)
         self.config.data["auto_switch_enabled"] = True
         window.toggle_animation_pause()
 
@@ -388,9 +393,9 @@ class TestAnimationPauseSeparate(unittest.TestCase):
     def test_pause_dung_animation_that_su(self):
         from PyQt5.QtGui import QMovie
 
-        from transparent_window import TransparentWindow
+        from gifpet.ui.pet_window import PetWindow
 
-        window = TransparentWindow(_app, self.config)
+        window = PetWindow(_app, self.config)
         window.toggle_animation_pause()
         self.assertEqual(
             window.movie.state(), QMovie.Paused, "GIF phai dung chay khi pause"
@@ -404,9 +409,9 @@ class TestAnimationPauseSeparate(unittest.TestCase):
     def test_tat_doi_gif_khong_lam_dung_animation(self):
         from PyQt5.QtGui import QMovie
 
-        from transparent_window import TransparentWindow
+        from gifpet.ui.pet_window import PetWindow
 
-        window = TransparentWindow(_app, self.config)
+        window = PetWindow(_app, self.config)
         window.toggle_auto_switch()
         self.assertFalse(self.config.get("auto_switch_enabled"))
         self.assertNotEqual(
@@ -425,16 +430,21 @@ class TestGifSwitchingSkipsBroken(unittest.TestCase):
         self.config = Config(os.path.join(self.temp_dir, "config.json"))
 
     def test_khong_chon_file_hong(self):
-        from transparent_window import TransparentWindow
+        """Thu vien GIF rieng chi duoc chua file dung duoc."""
+        from gifpet.ui.pet_window import PetWindow
 
-        self.config.data["gif_list"] = [
-            "abc.gif",
+        # Duong dan tuyet doi toi GIF that, de khong phu thuoc CWD.
+        good = os.path.join(DEFAULT_PACK_DIR, "idle.gif")
+        good2 = os.path.join(DEFAULT_PACK_DIR, "drag.gif")
+        self.config.data["gif_list"] = [good, "da-bi-xoa.gif", good2]
+        self.config.data["gif_path"] = good
+        window = PetWindow(_app, self.config)
+
+        self.assertNotIn(
             "da-bi-xoa.gif",
-            "hong.gif",
-            "GTwNX-QXwAA0stR.gif",
-        ]
-        self.config.data["gif_path"] = "abc.gif"
-        window = TransparentWindow(_app, self.config)
+            window.config.get("gif_list"),
+            "Entry hong phai bi loai khoi danh sach",
+        )
 
         chosen = set()
         for _ in range(30):
@@ -450,10 +460,12 @@ class TestGifSwitchingSkipsBroken(unittest.TestCase):
         window.quit_app()
 
     def test_danh_sach_duoc_don_sau_khi_nap(self):
-        from transparent_window import TransparentWindow
+        """Entry tro toi file khong ton tai bi loai khi nap cau hinh."""
+        from gifpet.ui.pet_window import PetWindow
 
-        self.config.data["gif_list"] = ["abc.gif", "da-bi-xoa.gif"]
-        window = TransparentWindow(_app, self.config)
+        good = os.path.join(DEFAULT_PACK_DIR, "idle.gif")
+        self.config.data["gif_list"] = [good, "da-bi-xoa.gif"]
+        window = PetWindow(_app, self.config)
         self.assertNotIn(
             "da-bi-xoa.gif",
             window.config.get("gif_list"),
@@ -514,7 +526,7 @@ class TestNoPersonalPathsInRepo(unittest.TestCase):
         )
 
     def test_config_luu_ngoai_repo(self):
-        from config import config_dir
+        from gifpet.core.config import config_dir
 
         self.assertFalse(
             os.path.abspath(config_dir()).startswith(os.path.abspath(BASE_DIR)),
@@ -526,6 +538,162 @@ class TestNoPersonalPathsInRepo(unittest.TestCase):
             os.path.exists(os.path.join(BASE_DIR, "data.json")),
             "data.json cu da duoc thay bang cau hinh ngoai repo",
         )
+
+
+class TestStateMachine(unittest.TestCase):
+    """Quy tac uu tien hanh vi (Giai doan 3)."""
+
+    def setUp(self):
+        self.machine = state_module.StateMachine()
+
+    def test_trang_thai_ban_dau_la_idle(self):
+        self.assertEqual(self.machine.state, state_module.IDLE)
+
+    def test_dang_bi_keo_thi_khong_duoc_ngu(self):
+        """Yeu cau ro nhat cua spec: dang keo thi khong duoc bat di ngu."""
+        self.machine.on_drag_start()
+        self.assertEqual(self.machine.state, state_module.DRAG)
+        self.assertFalse(self.machine.can_sleep())
+        self.assertFalse(
+            self.machine.request(state_module.SLEEP, reason="thử cho ngủ"),
+            "Dang bi keo ma van cho ngu -> sai",
+        )
+        self.assertEqual(self.machine.state, state_module.DRAG)
+
+    def test_dang_bi_keo_thi_khong_tu_di(self):
+        self.machine.on_drag_start()
+        self.assertFalse(self.machine.can_walk())
+        self.assertFalse(self.machine.request(state_module.WALK))
+
+    def test_dang_roi_thi_phai_tiep_dat_truoc(self):
+        """Dang roi thi hoan tat tiep dat roi moi lam viec khac."""
+        self.machine.on_drag_start()
+        self.machine.on_drag_release(near_ground=False)
+        self.assertEqual(self.machine.state, state_module.FALL)
+
+        for blocked in (state_module.SLEEP, state_module.WALK, state_module.TALK):
+            self.assertFalse(
+                self.machine.request(blocked),
+                f"Dang roi ma chuyen duoc sang {blocked} -> sai",
+            )
+        self.assertEqual(self.machine.state, state_module.FALL)
+
+        self.assertTrue(self.machine.on_landed())
+        self.assertEqual(self.machine.state, state_module.IDLE)
+
+    def test_tha_gan_mat_dat_thi_ve_idle(self):
+        self.machine.on_drag_start()
+        self.machine.on_drag_release(near_ground=True)
+        self.assertEqual(self.machine.state, state_module.IDLE)
+
+    def test_click_thi_phan_ung(self):
+        self.assertTrue(self.machine.on_click())
+        self.assertEqual(self.machine.state, state_module.REACT)
+
+    def test_dang_roi_thi_click_khong_phan_ung(self):
+        self.machine.on_drag_start()
+        self.machine.on_drag_release(near_ground=False)
+        self.assertFalse(self.machine.on_click())
+        self.assertEqual(self.machine.state, state_module.FALL)
+
+    def test_khong_tuong_tac_thi_ngu(self):
+        self.assertTrue(self.machine.can_sleep())
+        self.assertTrue(self.machine.on_idle_timeout())
+        self.assertEqual(self.machine.state, state_module.SLEEP)
+
+    def test_co_tuong_tac_thi_thuc_day(self):
+        self.machine.on_idle_timeout()
+        self.assertEqual(self.machine.state, state_module.SLEEP)
+        self.assertTrue(self.machine.on_interaction())
+        self.assertEqual(self.machine.state, state_module.IDLE)
+
+    def test_che_do_tap_trung_thi_dung_yen(self):
+        """Bat che do tap trung: pet dung yen hoac ngu, khong tu di."""
+        self.machine.set_focus_mode(True)
+        self.assertFalse(self.machine.can_walk())
+        self.assertFalse(self.machine.request(state_module.WALK))
+
+    def test_bat_tap_trung_khi_dang_di_thi_dung_lai(self):
+        self.machine.request(state_module.WALK)
+        self.assertEqual(self.machine.state, state_module.WALK)
+        self.machine.set_focus_mode(True)
+        self.assertEqual(
+            self.machine.state,
+            state_module.IDLE,
+            "Bat tap trung khi dang di -> phai dung yen",
+        )
+
+    def test_trang_thai_khong_hop_le_bi_tu_choi(self):
+        self.assertFalse(self.machine.request("khong-ton-tai"))
+        self.assertIn("không hợp lệ", self.machine.last_rejection)
+
+    def test_listener_duoc_goi_khi_chuyen_trang_thai(self):
+        seen = []
+        self.machine.listeners.append(lambda old, new: seen.append((old, new)))
+        self.machine.on_click()
+        self.assertEqual(seen, [(state_module.IDLE, state_module.REACT)])
+
+
+class TestPetPack(unittest.TestCase):
+    """Thu vien nhan vat: thieu trang thai thi dung idle.gif."""
+
+    def setUp(self):
+        self.pack = pet_pack.load_pack(DEFAULT_PACK_DIR)
+
+    def test_doc_duoc_nhan_vat_mac_dinh(self):
+        self.assertIsNotNone(self.pack)
+        self.assertEqual(self.pack.name, "default")
+
+    def test_co_animation_idle(self):
+        path = self.pack.animation_path(state_module.IDLE)
+        self.assertIsNotNone(path)
+        self.assertTrue(path.endswith("idle.gif"))
+
+    def test_trang_thai_co_gif_rieng(self):
+        self.assertTrue(self.pack.has_state("walk"))
+        self.assertTrue(self.pack.has_state("drag"))
+        self.assertTrue(self.pack.has_state("sleep"))
+
+    def test_trang_thai_thieu_thi_dung_fallback(self):
+        """Bo pet thieu trang thai van import duoc."""
+        for missing in ("fall", "react", "talk"):
+            self.assertFalse(
+                self.pack.has_state(missing),
+                f"{missing} khong nen co GIF rieng trong bo mau",
+            )
+            path = self.pack.animation_path(missing)
+            self.assertIsNotNone(path, f"{missing} phai fallback chu khong tra ve None")
+            self.assertTrue(
+                path.endswith(self.pack.fallback_animation),
+                f"{missing} phai dung {self.pack.fallback_animation}",
+            )
+
+    def test_missing_states_liet_ke_dung(self):
+        missing = self.pack.missing_states()
+        self.assertIn("fall", missing)
+        self.assertNotIn("idle", missing)
+
+    def test_doc_kich_thuoc_va_toc_do_tu_pet_json(self):
+        self.assertGreater(self.pack.movement["speed_px_per_step"], 0)
+        self.assertGreater(self.pack.behavior["idle_to_sleep_ms"], 0)
+
+    def test_thu_muc_khong_co_gif_thi_bo_qua(self):
+        empty_dir = tempfile.mkdtemp()
+        pack = pet_pack.load_pack(empty_dir)
+        self.assertIsNone(pack.animation_path(state_module.IDLE))
+
+    def test_discover_tim_duoc_nhan_vat(self):
+        packs = pet_pack.discover_packs(PETS_DIR)
+        self.assertGreaterEqual(len(packs), 1)
+        self.assertEqual(packs[0].name, "default", "default phai dung dau")
+
+    def test_pet_json_hong_khong_lam_crash(self):
+        temp_dir = tempfile.mkdtemp()
+        shutil.copy(VALID_GIF, os.path.join(temp_dir, "idle.gif"))
+        with open(os.path.join(temp_dir, "pet.json"), "w", encoding="utf-8") as handle:
+            handle.write("{ json hong ")
+        pack = pet_pack.load_pack(temp_dir)
+        self.assertIsNotNone(pack.animation_path(state_module.IDLE))
 
 
 if __name__ == "__main__":

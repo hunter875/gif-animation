@@ -72,7 +72,7 @@ Thủ công:
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python main.py
+.venv/bin/python -m gifpet
 ```
 
 Windows (PowerShell):
@@ -80,33 +80,41 @@ Windows (PowerShell):
 ```powershell
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\python main.py
+.venv\Scripts\python -m gifpet
 ```
 
 ## Phát triển
 
 Cấu trúc:
 
-| File | Vai trò |
+| Đường dẫn | Vai trò |
 |---|---|
-| `main.py` | Điểm khởi động |
-| `transparent_window.py` | Cửa sổ pet, menu khay, phím tắt |
-| `config.py` | Cấu hình người dùng, validate, ghi atomic |
-| `gif_library.py` | Chọn GIF hợp lệ, tính kích thước giữ tỉ lệ |
-| `screen_utils.py` | Giữ pet trong phạm vi màn hình |
-| `dialogs.py` | Dialog resize và cài đặt |
-| `gif_library_dialog.py` | Dialog thư viện GIF có thumbnail |
-| `tests/test_pet.py` | 45 test tự động |
-| `tests/acceptance_check.py` | Kiểm tra từng tiêu chí nghiệm thu |
+| `gifpet/__main__.py` | Điểm khởi động (`python -m gifpet`) |
+| `gifpet/core/config.py` | Cấu hình người dùng, validate, ghi atomic |
+| `gifpet/core/paths.py` | Mọi đường dẫn gốc, tập trung một chỗ |
+| `gifpet/core/gif_library.py` | Chọn GIF hợp lệ, tính kích thước giữ tỉ lệ |
+| `gifpet/core/pet_pack.py` | Đọc nhân vật, fallback khi thiếu trạng thái |
+| `gifpet/core/screen_utils.py` | Giữ pet trong phạm vi màn hình |
+| `gifpet/core/state.py` | Máy trạng thái (Giai đoạn 3) |
+| `gifpet/ui/pet_window.py` | Cửa sổ pet, menu khay, phím tắt |
+| `gifpet/ui/dialogs.py` | Dialog resize và cài đặt |
+| `gifpet/ui/gif_library_dialog.py` | Dialog thư viện GIF có thumbnail |
+| `pets/<tên>/pet.json` | Mô tả nhân vật: kích thước, tốc độ, tính cách |
+| `tests/test_core.py` | 67 test đơn vị |
+| `tests/test_acceptance.py` | 17 tiêu chí nghiệm thu |
+| `docs/ARCHITECTURE.md` | Kiến trúc và vị trí code từng giai đoạn |
 
 Chạy test:
 
 ```bash
-./run.sh --test      # 45 test đơn vị
+./run.sh --test      # 67 test đơn vị
 ./run.sh --accept    # 17 tiêu chí nghiệm thu
 # hoặc
-QT_QPA_PLATFORM=offscreen .venv/bin/python tests/test_pet.py
+QT_QPA_PLATFORM=offscreen .venv/bin/python tests/test_core.py
 ```
+
+Xem `docs/ARCHITECTURE.md` để biết cấu trúc thư mục đầy đủ và vị trí code
+của từng giai đoạn.
 
 Test dùng `QT_QPA_PLATFORM=offscreen` nên chạy được trên máy chủ không có màn hình.
 Test cũng tự dùng thư mục tạm cho cấu hình, không ghi vào cấu hình thật của bạn.

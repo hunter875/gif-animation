@@ -3,12 +3,17 @@
 Kien truc:
 - ``Config``       : cau hinh nguoi dung, luu ngoai repo.
 - ``gif_library``  : chon GIF hop le, khong bao gio ket dinh file hong.
+- ``pet_pack``     : thu vien nhan vat, thieu trang thai thi dung idle.gif.
 - ``screen_utils`` : giu pet trong pham vi man hinh.
-- ``TransparentWindow``: cua so pet, menu khay, phim tat.
+- ``PetWindow``    : cua so pet, menu khay, phim tat.
 
 Hai diem da sua so voi ban goc:
 - ``mouseMoveEvent`` khong con ghi JSON moi lan di chuyen; chi luu khi tha chuot.
 - ``scale_gif`` khong con ep GIF thanh hinh vuong; kich thuoc tinh theo ti le.
+
+Trang thai hanh vi (idle/walk/drag/fall/sleep/react/talk) hien moi o muc co ban:
+``set_state`` da co san va tu dong chon GIF theo trang thai. May trang thai day
+du voi quy tac uu tien se nam o ``gifpet/core/state.py`` (Giai doan 3).
 """
 
 import os
@@ -30,18 +35,24 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 
-import gif_library
-import screen_utils
-from config import Config
-from dialogs import ResizeDialog, SettingsDialog
-from gif_library_dialog import GifLibraryDialog
+from gifpet.core import gif_library, paths, pet_pack
+from gifpet.core import screen_utils
+from gifpet.core.config import Config
+from gifpet.ui.dialogs import ResizeDialog, SettingsDialog
+from gifpet.ui.gif_library_dialog import GifLibraryDialog
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Goc project: noi chua GIF di kem va thu muc pets/.
+BASE_DIR = paths.PROJECT_ROOT
 WALK_INTERVAL_MS = 40
 WALK_STEP = 2
 
+# Trang thai hien tai cua pet. Giai doan 3 se mo rong thanh may trang thai day du.
+STATE_IDLE = "idle"
+STATE_WALK = "walk"
+STATE_DRAG = "drag"
 
-class TransparentWindow(QLabel):
+
+class PetWindow(QLabel):
     def __init__(self, app, config=None):
         super().__init__()
         self.app = app
@@ -54,8 +65,12 @@ class TransparentWindow(QLabel):
         self.walk_direction = 1
         self._hidden_for_fullscreen = False
         self._current_resolved_path = None
+        self.state = STATE_IDLE
+        self.pack = None
+        self.packs = []
 
         self._restore_state()
+        self._load_pack()
         self._setup_window_flags()
         self._load_gif()
         self._setup_timers()
@@ -69,6 +84,39 @@ class TransparentWindow(QLabel):
     def _restore_state(self):
         cfg = self.config
         cfg.data["gif_list"] = self._clean_list(cfg.get("gif_list"))
+
+    def _load_pack(self):
+        """Tim cac nhan vat trong pets/ va chon nhan vat dang dung."""
+        self.packs = pet_pack.discover_packs(paths.PETS_DIR)
+        if not self.packs:
+            print(
+                f"Canh bao: khong tim thay nhan vat nao trong {paths.PETS_DIR}. "
+                "Se dung danh sach GIF rieng le trong cau hinh."
+            )
+            return
+
+        wanted = self.config.get("pet_pack")
+        chosen = None
+        for pack in self.packs:
+            if pack.name == wanted:
+                chosen = pack
+                break
+        if chosen is None:
+            chosen = pet_pack.load_default_pack(paths.PETS_DIR)
+
+        self.pack = chosen
+        if chosen is not None:
+            missing = chosen.missing_states()
+            if missing:
+                print(
+                    f"Nhan vat '{chosen.name}' thieu animation cho: "
+                    f"{', '.join(missing)} -> dung {chosen.fallback_animation} thay the."
+                )
+            self.config.data["pet_pack"] = chosen.name
+
+    def available_packs(self):
+        return list(self.packs)
+
 
     def _clean_list(self, entries):
         """Loai entry trung lap va entry rong khoi thu vien."""
@@ -126,7 +174,7 @@ class TransparentWindow(QLabel):
         self.tray.show()
 
     def _tray_icon(self):
-        icon_path = os.path.join(BASE_DIR, "app_icon.ico")
+        icon_path = paths.APP_ICON
         if os.path.exists(icon_path):
             icon = QIcon(icon_path)
             if not icon.isNull():
@@ -229,29 +277,78 @@ class TransparentWindow(QLabel):
     # GIF
     # ------------------------------------------------------------------
     def _load_gif(self, preferred=None):
-        """Nap GIF theo thu tu uu tien va luon co GIF de hien thi."""
+        """Nap GIF theo thu tu uu tien va luon co GIF de hien thi.
+
+        Uu tien 1: GIF cua trang thai hien tai trong nhan vat dang dung.
+        Uu tien 2: GIF da chon, neu con hop le.
+        Uu tien 3: GIF hop le khac trong thu vien.
+        Uu tien 4: GIF mac dinh di kem repo.
+        """
         cfg = self.config
+        # Luon don thu vien GIF truoc, du sau do di theo nhanh nao.
+        self._prune_gif_list()
+
+        # Uu tien 1: animation cua trang thai hien tai trong pet pack.
+        if self.pack is not None and preferred is None:
+            state_path = self.pack.animation_path(self.state)
+            if state_path is not None:
+                return self._apply_movie(state_path)
+
         wanted = preferred if preferred is not None else cfg.get("gif_path")
 
         resolved, stored = gif_library.pick_working_gif(
             wanted, cfg.get("gif_list"), BASE_DIR
         )
         if resolved is None:
+            # Thu cuoi: nhan vat dang dung co GIF nao khac khong.
+            if self.pack is not None:
+                fallback = self.pack.animation_path(self.state)
+                if fallback is not None:
+                    return self._apply_movie(fallback)
             self._show_missing_gif_message()
             return False
 
         if stored != wanted:
             print(f"GIF đã chọn không dùng được, chuyển sang: {resolved}")
 
-        # Ghi lai danh sach da loc de khong con chon trung file hong.
-        cleaned = gif_library.existing_entries(cfg.get("gif_list"), BASE_DIR)
         stored_list = gif_library.normalize_path(resolved, BASE_DIR)
-        if stored_list not in cleaned:
-            cleaned.append(stored_list)
-        cfg.data["gif_list"] = cleaned
+        if stored_list not in cfg.data["gif_list"]:
+            cfg.data["gif_list"].append(stored_list)
         cfg.data["gif_path"] = gif_library.normalize_path(resolved, BASE_DIR)
 
         self._apply_movie(resolved)
+        return True
+
+    def _prune_gif_list(self):
+        """Loai khoi thu vien nhung entry tro toi file da mat hoac hong.
+
+        Nho vay vong doi GIF 10 giay khong bao gio chon trung file hong.
+        """
+        cfg = self.config
+        cleaned = gif_library.existing_entries(cfg.get("gif_list"), BASE_DIR)
+        cfg.data["gif_list"] = cleaned
+        return cleaned
+
+    def set_state(self, state):
+        """Chuyen trang thai va doi animation tuong ung.
+
+        Neu nhan vat khong co GIF cho trang thai nay, ``animation_path`` tu
+        dong tra ve fallback (mac dinh idle.gif), nen khong can xu ly rieng.
+        """
+        if state == self.state:
+            return False
+        previous = self.state
+        self.state = state
+
+        if self.pack is None:
+            return False
+
+        path = self.pack.animation_path(state)
+        if path is None:
+            self.state = previous
+            return False
+        # Khong dung lai cua so hay vi tri: chi thay movie.
+        self._apply_movie(path)
         return True
 
     def _apply_movie(self, resolved_path):

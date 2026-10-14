@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 
-from gif_library import is_valid_gif, normalize_path, resolve_path
+from gifpet.core.gif_library import is_valid_gif, normalize_path, resolve_path
 
 THUMB = 96
 

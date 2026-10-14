@@ -1,0 +1,36 @@
+{
+    "name": "default",
+    "display_name": "Mèo mặc định",
+    "description": "Nhân vật mẫu đi kèm repo. Bốn GIF hiện có được gán tạm cho bốn trạng thái; các trạng thái còn thiếu sẽ dùng idle.gif.",
+    "animations": {
+        "idle": "idle.gif",
+        "walk": "walk.gif",
+        "drag": "drag.gif",
+        "sleep": "sleep.gif"
+    },
+    "fallback_animation": "idle.gif",
+    "size": {
+        "width": 200,
+        "height": 267,
+        "lock_aspect": true
+    },
+    "movement": {
+        "speed_px_per_step": 2,
+        "step_interval_ms": 40,
+        "pause_chance": 0.3,
+        "min_pause_ms": 2000,
+        "max_pause_ms": 8000
+    },
+    "behavior": {
+        "idle_to_sleep_ms": 120000,
+        "react_duration_ms": 1500,
+        "fall_speed_px_per_step": 14,
+        "fall_step_interval_ms": 30
+    },
+    "personality": {
+        "tone": "thân thiện, hơi lười",
+        "likes": ["nằm phơi nắng", "được vuốt ve"],
+        "dislikes": ["bị kéo quá nhanh", "tiếng ồn lớn"],
+        "max_reply_chars": 120
+    }
+}

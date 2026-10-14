@@ -1,22 +1,28 @@
-"""Diem khoi dong cua GIF Pet."""
+"""Diem khoi dong cua GIF Pet.
+
+Chay bang mot trong hai cach:
+
+    python -m gifpet
+    ./run.sh
+"""
 
 import sys
 
-from PyQt5.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
+from PyQt5.QtWidgets import QApplication, QSystemTrayIcon
 
-from config import Config
-from transparent_window import TransparentWindow
+from gifpet.core.config import Config
+from gifpet.ui.pet_window import PetWindow
 
 
-def main():
+def main(argv=None):
     # setQuitOnLastWindowClosed(False): pet co the bi an nhung app van chay
     # trong khay he thong.
-    app = QApplication(sys.argv)
+    app = QApplication(argv if argv is not None else sys.argv)
     app.setApplicationName("GifAnimation")
     app.setQuitOnLastWindowClosed(False)
 
     config = Config()
-    window = TransparentWindow(app, config)
+    window = PetWindow(app, config)
     if config.get("visible"):
         window.show()
 

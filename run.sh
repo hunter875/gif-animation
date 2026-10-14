@@ -44,17 +44,17 @@ fi
 
 if [ "$MODE" = "test" ]; then
     exec env QT_QPA_PLATFORM=offscreen \
-        "$VENV_DIR/bin/python" "$SCRIPT_DIR/tests/test_pet.py"
+        "$VENV_DIR/bin/python" "$SCRIPT_DIR/tests/test_core.py"
 fi
 
 if [ "$MODE" = "accept" ]; then
     exec env QT_QPA_PLATFORM=offscreen \
-        "$VENV_DIR/bin/python" "$SCRIPT_DIR/tests/acceptance_check.py"
+        "$VENV_DIR/bin/python" "$SCRIPT_DIR/tests/test_acceptance.py"
 fi
 
 if [ "$MODE" = "headless" ]; then
     export QT_QPA_PLATFORM=offscreen
-    exec "$VENV_DIR/bin/python" "$SCRIPT_DIR/main.py"
+    exec "$VENV_DIR/bin/python" -m gifpet
 fi
 
 # App can moi truong do hoa that de hien thi GIF.
@@ -66,4 +66,4 @@ if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
     exit 1
 fi
 
-exec "$VENV_DIR/bin/python" "$SCRIPT_DIR/main.py" "$@"
+exec "$VENV_DIR/bin/python" -m gifpet "$@"

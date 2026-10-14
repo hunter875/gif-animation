@@ -1,3 +1,6 @@
 .venv/
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
+config.local.json

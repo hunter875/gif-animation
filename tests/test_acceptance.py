@@ -16,12 +16,15 @@ from PyQt5.QtCore import QEvent, QPoint, Qt  # noqa: E402
 from PyQt5.QtGui import QMovie, QMouseEvent  # noqa: E402
 from PyQt5.QtWidgets import QApplication  # noqa: E402
 
-import gif_library  # noqa: E402
-import screen_utils  # noqa: E402
-from config import Config  # noqa: E402
-from transparent_window import TransparentWindow  # noqa: E402
+from gifpet.core import gif_library  # noqa: E402
+from gifpet.core import screen_utils  # noqa: E402
+from gifpet.core.config import Config  # noqa: E402
+from gifpet.core.paths import PETS_DIR, PROJECT_ROOT  # noqa: E402
+from gifpet.ui.pet_window import PetWindow  # noqa: E402
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = PROJECT_ROOT
+# GIF cua nhan vat nam trong pets/, khong phai goc project.
+GIF_DIR = os.path.join(PETS_DIR, "default")
 app = QApplication.instance() or QApplication([])
 
 results = []
@@ -65,7 +68,7 @@ print("=" * 72)
 config = fresh_config()
 config.data.update({"gif_path": "da-bi-xoa.gif", "gif_list": ["da-bi-xoa.gif"]})
 config.save()
-window = TransparentWindow(app, config)
+window = PetWindow(app, config)
 check(
     "Tu tim GIF khi mo app (file mat -> van hien pet)",
     window.movie is not None and window.movie.isValid(),
@@ -75,7 +78,7 @@ window.quit_app()
 
 # --- Cau hinh theo nguoi dung ---
 config = fresh_config()
-window = TransparentWindow(app, config)
+window = PetWindow(app, config)
 window.move(321, 222)
 press(window)
 release(window)
@@ -96,9 +99,9 @@ window.quit_app()
 # --- Khong lac khoi man hinh ---
 area = app.primaryScreen().availableGeometry()
 config = fresh_config()
-config.data.update({"x": 99999, "y": 99999, "gif_path": "abc.gif", "gif_list": ["abc.gif"]})
+config.data.update({"x": 99999, "y": 99999, "gif_path": "idle.gif", "gif_list": ["idle.gif"]})
 config.save()
-window = TransparentWindow(app, config)
+window = PetWindow(app, config)
 recovered = screen_utils.is_on_any_screen(
     window.x(), window.y(), window.width(), window.height(),
     screen_utils.screen_rects(app),
@@ -124,10 +127,10 @@ window.quit_app()
 # --- Resize giu ti le ---
 config = fresh_config()
 config.data.update(
-    {"gif_path": "abc.gif", "gif_list": ["abc.gif"], "gif_width": 250, "width_locked": True}
+    {"gif_path": "idle.gif", "gif_list": ["idle.gif"], "gif_width": 250, "width_locked": True}
 )
 config.save()
-window = TransparentWindow(app, config)
+window = PetWindow(app, config)
 ow, oh = window.original_size()
 ratio_ok = abs(window.width() / window.height() - ow / oh) < 0.01
 not_square = window.width() != window.height()
@@ -139,7 +142,7 @@ check(
 
 # --- Luu cau hinh hop ly ---
 config = fresh_config()
-window = TransparentWindow(app, config)
+window = PetWindow(app, config)
 saves = []
 original_save = config.save
 
@@ -189,13 +192,13 @@ window.quit_app()
 # --- Doi GIF muot ---
 config = fresh_config()
 config.data.update(
-    {"gif_path": "abc.gif", "gif_list": ["abc.gif", "GTwNX-QXwAA0stR.gif"]}
+    {"gif_path": "idle.gif", "gif_list": ["idle.gif", "drag.gif"]}
 )
 config.save()
-window = TransparentWindow(app, config)
+window = PetWindow(app, config)
 window.move(123, 456)
 before = (window.x(), window.y())
-window._load_gif(preferred="GTwNX-QXwAA0stR.gif")
+window._load_gif(preferred="drag.gif")
 after = (window.x(), window.y())
 check(
     "Doi GIF khong nhay vi tri",
@@ -210,9 +213,9 @@ print("GIAI DOAN 2 - DUNG PET HANG NGAY")
 print("=" * 72)
 
 config = fresh_config()
-config.data.update({"gif_path": "abc.gif", "gif_list": ["abc.gif"]})
+config.data.update({"gif_path": "idle.gif", "gif_list": ["idle.gif"]})
 config.save()
-window = TransparentWindow(app, config)
+window = PetWindow(app, config)
 
 # --- Khay he thong la trung tam dieu khien ---
 labels = [a.text() for a in window.menu.actions() if a.text()]
@@ -279,8 +282,12 @@ window._hidden_for_fullscreen = False
 window.movie.setPaused(False)
 
 # --- Thu vien GIF: bo qua file hong ---
-config.data["gif_list"] = ["abc.gif", "da-mat.gif", "hong.gif", "GTwNX-QXwAA0stR.gif"]
-config.data["gif_path"] = "abc.gif"
+good = os.path.join(GIF_DIR, "idle.gif")
+good2 = os.path.join(GIF_DIR, "drag.gif")
+config.data["gif_list"] = [good, "da-mat.gif", "hong.gif", good2]
+config.data["gif_path"] = good
+# Nap lai thu vien de app don file hong.
+window._prune_gif_list()
 chosen = set()
 for _ in range(40):
     window.auto_switch_gif()
@@ -291,20 +298,20 @@ all_valid = all(
 check(
     "Bo qua file hong, khong chon trung moi 10 giay",
     all_valid and len(chosen) > 0,
-    f"40 lan doi GIF -> chon {sorted(chosen)}, tat ca hop le={all_valid}",
+    f"40 lan doi GIF -> chon {sorted(os.path.basename(c) for c in chosen)}, tat ca hop le={all_valid}",
 )
 check(
     "Danh sach GIF tu don file hong khi nap",
-    "da-mat.gif" not in config.get("gif_list"),
-    f"gif_list sau khi nap={config.get('gif_list')}",
+    "da-mat.gif" not in config.get("gif_list") and "hong.gif" not in config.get("gif_list"),
+    f"gif_list sau khi don={[os.path.basename(g) for g in config.get('gif_list')]}",
 )
 window.quit_app()
 
 # --- Pet tu di ---
 config = fresh_config()
-config.data.update({"gif_path": "abc.gif", "gif_list": ["abc.gif"]})
+config.data.update({"gif_path": "idle.gif", "gif_list": ["idle.gif"]})
 config.save()
-window = TransparentWindow(app, config)
+window = PetWindow(app, config)
 area = app.primaryScreen().availableGeometry()
 window.move(50, 100)
 start_x = window.x()
