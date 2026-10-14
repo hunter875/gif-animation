@@ -63,6 +63,7 @@ sudo apt install libxcb-xinerama0 libxcb-cursor0 libxkbcommon-x11-0
 ```bash
 ./run.sh              # tự tạo virtualenv và cài dependency
 ./run.sh --test       # chạy test (không cần màn hình)
+./run.sh --accept     # kiểm tra từng tiêu chí nghiệm thu
 ./run.sh --headless   # khởi động không màn hình, để kiểm tra code
 ```
 
@@ -95,12 +96,14 @@ Cấu trúc:
 | `screen_utils.py` | Giữ pet trong phạm vi màn hình |
 | `dialogs.py` | Dialog resize và cài đặt |
 | `gif_library_dialog.py` | Dialog thư viện GIF có thumbnail |
-| `tests/test_pet.py` | Test tự động |
+| `tests/test_pet.py` | 45 test tự động |
+| `tests/acceptance_check.py` | Kiểm tra từng tiêu chí nghiệm thu |
 
 Chạy test:
 
 ```bash
-./run.sh --test
+./run.sh --test      # 45 test đơn vị
+./run.sh --accept    # 17 tiêu chí nghiệm thu
 # hoặc
 QT_QPA_PLATFORM=offscreen .venv/bin/python tests/test_pet.py
 ```
