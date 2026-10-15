@@ -51,7 +51,9 @@ gif-animation/
 │   └── test_phase3_flow.py     # 16 bước vòng đời Giai đoạn 3
 │
 ├── tools/
-│   └── make_state_animations.py  # sinh fall/react/talk từ GIF gốc
+│   ├── make_state_animations.py  # sinh fall/react/talk từ GIF gốc
+│   ├── build_binary.sh           # đóng gói binary bằng Nuitka
+│   └── slim_binary.sh            # dọn bớt Qt plugin không dùng
 │
 ├── docs/
 │   └── ARCHITECTURE.md         # file này
@@ -166,6 +168,40 @@ phương thức này để pet nói.
 
 Tương tác với `focus_mode` thủ công: khi Pomodoro tắt, `focus_mode` do người
 dùng đặt vẫn được giữ; khi Pomodoro bật, giờ tập trung cũng khoá pet lại.
+
+## Đóng gói thành binary
+
+Không cần cài Python để chạy. Dùng Nuitka (compile Python → C → binary):
+
+```bash
+./tools/build_binary.sh              # standalone
+./tools/build_binary.sh --onefile    # một file duy nhất (cần patchelf)
+./tools/slim_binary.sh               # dọn Qt plugin không dùng
+```
+
+Kết quả đo thực tế trên Ubuntu 24.04:
+
+| | Python trực tiếp | Binary Nuitka |
+|---|---|---|
+| Cần cài Python | có | **không** |
+| Kích thước phân phối | 215 MB (venv) | **172 MB** |
+| Binary chính | — | 15 MB |
+| RAM khi chạy | 58 MB | 74 MB |
+
+**Điểm quan trọng: đóng gói không làm app nhẹ đi.** Nuitka kéo theo toàn bộ Qt
+(110 MB riêng PyQt5) và các thư viện phụ thuộc. Lợi ích thật là **không cần
+cài Python** và có **một thư mục chạy được ngay**.
+
+`slim_binary.sh` cắt được ~49 MB nhờ bỏ Qt plugin không dùng (media, in ấn,
+QML/Quick, và tùy chọn Wayland). Đặt `KEEP_WAYLAND=0` để bỏ thêm 26 MB, nhưng
+khi đó app chỉ chạy trên X11.
+
+Hai cái bẫy khi build, đã xử lý trong script:
+
+- Nuitka cần `patchelf` ở chế độ standalone. Không có quyền root vẫn được —
+  `pip install patchelf` rồi thêm `.venv/bin` vào PATH.
+- `--output-filename` **không được trùng tên thư mục package**. Đặt là `gifpet`
+  sẽ lỗi `data file conflicts with executable`; script dùng `gif-pet`.
 
 ## Giai đoạn 4 — AI (chưa triển khai)
 

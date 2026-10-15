@@ -104,6 +104,25 @@ python -m venv .venv
 .venv\Scripts\python -m gifpet
 ```
 
+## Đóng gói thành binary (không cần cài Python)
+
+```bash
+./tools/build_binary.sh     # build standalone
+./tools/slim_binary.sh      # dọn Qt plugin không dùng
+./dist/gifpet.dist/gif-pet  # chạy
+```
+
+Kết quả đo trên Ubuntu 24.04:
+
+| | Python trực tiếp | Binary Nuitka |
+|---|---|---|
+| Cần cài Python | có | **không** |
+| Kích thước | 215 MB | **172 MB** |
+| RAM | 58 MB | 74 MB |
+
+Đóng gói **không làm app nhẹ đi** — Nuitka kéo theo cả Qt. Lợi ích thật là
+không cần cài Python và có thư mục chạy được ngay.
+
 ## Phát triển
 
 Cấu trúc:
@@ -130,6 +149,8 @@ Cấu trúc:
 | `tests/test_acceptance.py` | 17 tiêu chí nghiệm thu |
 | `tests/test_phase3_flow.py` | 16 bước vòng đời Giai đoạn 3 |
 | `tools/make_state_animations.py` | Sinh animation trạng thái còn thiếu |
+| `tools/build_binary.sh` | Đóng gói binary bằng Nuitka |
+| `tools/slim_binary.sh` | Dọn Qt plugin không dùng |
 | `docs/ARCHITECTURE.md` | Kiến trúc và vị trí code từng giai đoạn |
 
 Chạy test:

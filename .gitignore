@@ -4,3 +4,9 @@ __pycache__/
 *.pyo
 .pytest_cache/
 config.local.json
+# Ket qua dong goi binary (Nuitka)
+dist/
+build/
+*.build/
+*.dist/
+*.onefile-build/
