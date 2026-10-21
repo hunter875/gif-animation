@@ -49,6 +49,7 @@ gif-animation/
 │   ├── test_pomodoro.py        # 32 test nhắc tập trung / nghỉ
 │   ├── test_speech_bubble.py   # 14 test bong bóng thoại
 │   ├── test_stability.py       # 10 test chống rò rỉ bộ nhớ / chống treo
+│   ├── test_security.py        # 15 test khoá ràng buộc bảo mật
 │   ├── test_acceptance.py      # 17 tiêu chí nghiệm thu
 │   └── test_phase3_flow.py     # 16 bước vòng đời Giai đoạn 3
 │
@@ -58,7 +59,8 @@ gif-animation/
 │   └── slim_binary.sh            # dọn bớt Qt plugin không dùng
 │
 ├── docs/
-│   └── ARCHITECTURE.md         # file này
+│   ├── ARCHITECTURE.md         # file này
+│   └── SECURITY.md             # ràng buộc bảo mật Giai đoạn 4
 │
 ├── run.sh                      # chạy app / test / nghiệm thu
 ├── requirements.txt

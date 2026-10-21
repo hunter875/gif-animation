@@ -174,17 +174,21 @@ Cấu trúc:
 | `pets/<tên>/pet.json` | Mô tả nhân vật: kích thước, tốc độ, tính cách |
 | `tests/test_core.py` | 83 test đơn vị |
 | `tests/test_pomodoro.py` | 32 test nhắc tập trung / nghỉ |
+| `tests/test_speech_bubble.py` | 14 test bong bóng thoại |
+| `tests/test_stability.py` | 10 test chống rò rỉ bộ nhớ / chống treo |
+| `tests/test_security.py` | 15 test khoá ràng buộc bảo mật |
 | `tests/test_acceptance.py` | 17 tiêu chí nghiệm thu |
 | `tests/test_phase3_flow.py` | 16 bước vòng đời Giai đoạn 3 |
 | `tools/make_state_animations.py` | Sinh animation trạng thái còn thiếu |
 | `tools/build_binary.sh` | Đóng gói binary bằng Nuitka |
 | `tools/slim_binary.sh` | Dọn Qt plugin không dùng |
 | `docs/ARCHITECTURE.md` | Kiến trúc và vị trí code từng giai đoạn |
+| `docs/SECURITY.md` | Ràng buộc bảo mật cho Giai đoạn 4 (AI) |
 
 Chạy test:
 
 ```bash
-./run.sh --test      # tất cả test đơn vị (83 + 32)
+./run.sh --test      # tất cả test đơn vị (83 + 32 + 14 + 10 + 15)
 ./run.sh --accept    # 17 tiêu chí nghiệm thu
 ./run.sh --phase3    # 16 bước vòng đời Giai đoạn 3
 # hoặc
@@ -192,7 +196,8 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python tests/test_core.py
 ```
 
 Xem `docs/ARCHITECTURE.md` để biết cấu trúc thư mục đầy đủ và vị trí code
-của từng giai đoạn.
+của từng giai đoạn. Bảo mật (chống prompt injection, API key, quota, chi phí)
+ở `docs/SECURITY.md`.
 
 Test dùng `QT_QPA_PLATFORM=offscreen` nên chạy được trên máy chủ không có màn hình.
 Test cũng tự dùng thư mục tạm cho cấu hình, không ghi vào cấu hình thật của bạn.

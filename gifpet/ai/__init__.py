@@ -8,7 +8,7 @@ Thiet ke du kien, theo dung yeu cau trong spec:
     quota.py      dem luot dung trong ngay, tran luot/ngay
     brain.py      gom su kien -> goi model -> tra ve (cau noi, hanh dong)
 
-Nguyen tac bat buoc:
+Xem ``docs/SECURITY.md`` de biet day du rang buoc bao mat. Tom tat:
 
 - Model CHI duoc de xuat hanh dong co trong danh sach cho phep. App kiem tra
   ten hanh dong, tham so va tan suat truoc khi thuc hien.
@@ -16,4 +16,8 @@ Nguyen tac bat buoc:
 - Khong gui lai toan bo lich su moi lan; chi gui su kien da chon.
 - Het quota hoac mat mang thi pet van hoat dong local binh thuong.
 - Click lien tuc duoc gom thanh mot su kien; pet tu di, roi, ngu khong goi model.
+- API key KHONG nam trong config.json: dung bien moi truong GIFPET_API_KEY
+  hoac file secrets.json rieng voi quyen 0600.
+- Noi dung tu nguon ngoai (clipboard, ten tab) la DU LIEU, khong bao gio duoc
+  noi vao system prompt nhu mot menh lenh.
 """

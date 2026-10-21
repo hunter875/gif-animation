@@ -57,6 +57,9 @@ DEFAULTS = {
     "pomodoro_notify": True,
     "pomodoro_checkin": True,
     # --- Giai doan 4: AI (tat mac dinh, chua trien khai) ---
+    # Rang buoc bao mat: xem docs/SECURITY.md. API key KHONG nam trong file
+    # nay - no o bien moi truong GIFPET_API_KEY hoac file secrets.json rieng
+    # voi quyen 0600.
     "ai_enabled": False,
     "ai_provider": "groq",
     "ai_model": "",
@@ -64,9 +67,6 @@ DEFAULTS = {
     "ai_used_today": 0,
     "ai_used_date": "",
     "ai_proactive": False,
-    # --- Giai doan 5: giong noi (tat mac dinh, chua trien khai) ---
-    "voice_enabled": False,
-    "voice_muted": True,
 }
 
 
