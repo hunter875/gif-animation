@@ -47,6 +47,8 @@ gif-animation/
 ├── tests/
 │   ├── test_core.py            # 83 test đơn vị
 │   ├── test_pomodoro.py        # 32 test nhắc tập trung / nghỉ
+│   ├── test_speech_bubble.py   # 14 test bong bóng thoại
+│   ├── test_stability.py       # 10 test chống rò rỉ bộ nhớ / chống treo
 │   ├── test_acceptance.py      # 17 tiêu chí nghiệm thu
 │   └── test_phase3_flow.py     # 16 bước vòng đời Giai đoạn 3
 │
@@ -127,6 +129,54 @@ Phân biệt click và kéo: bấm rồi nhả mà **không** di chuyển quá 4
 
 Vòng đời đầy đủ đã kiểm tra tự động trong `tests/test_phase3_flow.py`:
 mở app → tự đi → nghỉ → kéo → vùng vẫy → thả → rơi → tiếp đất → click → phản ứng.
+
+## Độ ổn định: ba lớp chặn treo máy
+
+Đo thật trên máy dev: **~60 MB RAM, ~19% một nhân CPU** khi pet đi lại, RAM
+phẳng sau 45 giây chạy liên tục. Ba lớp bảo vệ:
+
+### 1. Trần RAM ở `run.sh`
+
+```bash
+MAX_RAM_MB="${GIFPET_MAX_RAM_MB:-700}"   # 0 = tắt
+prlimit --as=$((MAX_RAM_MB * 1024 * 1024)) -- python -m gifpet
+```
+
+Vượt trần thì kernel dừng riêng tiến trình pet (`MemoryError`), hệ thống không
+bị ảnh hưởng. Không có `prlimit` thì lùi về `ulimit -v`.
+
+### 2. Lỗi trong timer không làm chết app
+
+Timer của Qt không có chỗ bắt lỗi: một exception trong `timeout` sẽ thoát khỏi
+vòng lặp sự kiện và tắt app. Mọi timer đi qua `PetWindow._guarded()`:
+
+- bắt exception, ghi `traceback` **một lần** mỗi đợt lỗi (không đổ log)
+- tiếp tục chạy bình thường
+- nếu cùng chỗ lỗi ≥50 lần trong 10 giây → trả `False`, caller dừng vòng lặp đó
+  để không đốt CPU
+
+`sys.excepthook` được đặt trong `__main__` để lỗi ngoài timer cũng in rõ ràng
+thay vì chết im lặng.
+
+### 3. Cache `QMovie` — không rò rỉ khi đổi GIF
+
+**Đây là lỗi tiềm ẩn nghiêm trọng nhất, đã sửa.** `QMovie` của Qt không giải
+phóng hết tài nguyên C++ khi bị huỷ (`deleteLater()` không đủ). Đo được:
+
+| Tình huống | RSS tăng |
+|---|---|
+| Tạo/huỷ `QMovie` 600 lần (cách cũ: mỗi lần đổi GIF) | **1 503 MB** |
+| Tái sử dụng `QMovie` từ cache, 600 lần đổi | **13 MB** |
+
+Nghĩa là để pet chạy vài giờ, đổi GIF vài nghìn lần là đủ ngốn hết RAM và treo
+máy. Cách sửa: `PetWindow._movie_for(path)` giữ `dict` đường dẫn → `QMovie`,
+chỉ tạo mới khi chưa có. `_prune_movie_cache()` giải phóng GIF đã bị xoá khỏi
+thư viện. `_release_movies()` được gọi trong `closeEvent` **trước** khi cửa sổ
+bị huỷ — nếu để ngược thứ tự, `QMovie` còn chạy sẽ gọi vào `QLabel` đã chết và
+gây segfault.
+
+Khoá lại bằng `tests/test_stability.py` (10 test), gồm cả đo RSS thật để phát
+hiện rò rỉ tái phát.
 
 ## Cấu hình người dùng
 

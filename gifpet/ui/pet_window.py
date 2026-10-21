@@ -18,6 +18,7 @@ du voi quy tac uu tien se nam o ``gifpet/core/state.py`` (Giai doan 3).
 
 import os
 import random
+import sys
 import time
 
 from PyQt5.QtCore import QPoint, QRect, QSize, Qt, QTimer
@@ -71,6 +72,14 @@ class PetWindow(QLabel):
         self._moved = False
         self.label = None
         self.movie = None
+        # Cache QMovie theo duong dan: QMovie khong giai phong het tai nguyen
+        # khi bi huy, nen phai tai su dung thay vi tao moi moi lan doi GIF.
+        self._movie_cache = {}
+        # Dem loi trong timer de chan vong lap loi dot CPU.
+        self._error_count = 0
+        self._error_window_start = 0.0
+        self._error_paused = False
+        self._last_error = None
         self.tray = None
         self.walk_direction = 1
         self._hidden_for_fullscreen = False
@@ -206,30 +215,42 @@ class PetWindow(QLabel):
 
     def _setup_timers(self):
         self.switch_timer = QTimer(self)
-        self.switch_timer.timeout.connect(self.auto_switch_gif)
+        self.switch_timer.timeout.connect(
+            lambda: self._guarded("auto_switch_gif", self.auto_switch_gif)
+        )
         self._apply_switch_timer()
 
         # Vong lap hanh vi: quyet dinh di / nghi / ngu.
         self.behavior_timer = QTimer(self)
-        self.behavior_timer.timeout.connect(self._behavior_tick)
+        self.behavior_timer.timeout.connect(
+            lambda: self._guarded("_behavior_tick", self._behavior_tick)
+        )
         self.behavior_timer.start(BEHAVIOR_TICK_MS)
 
         # Di chuyen: tach rieng de toc do muot theo pet.json.
         self.walk_timer = QTimer(self)
-        self.walk_timer.timeout.connect(self._walk_step)
+        self.walk_timer.timeout.connect(
+            lambda: self._guarded("_walk_step", self._walk_step)
+        )
 
         # Roi: nhip nhanh hon.
         self.fall_timer = QTimer(self)
-        self.fall_timer.timeout.connect(self._fall_step)
+        self.fall_timer.timeout.connect(
+            lambda: self._guarded("_fall_step", self._fall_step)
+        )
 
         # Het thoi gian phan ung / noi thi quay ve idle.
         self.state_timer = QTimer(self)
         self.state_timer.setSingleShot(True)
-        self.state_timer.timeout.connect(self._on_state_timeout)
+        self.state_timer.timeout.connect(
+            lambda: self._guarded("_on_state_timeout", self._on_state_timeout)
+        )
 
         # Dong ho tap trung / nghi.
         self.pomodoro_timer = QTimer(self)
-        self.pomodoro_timer.timeout.connect(self._pomodoro_tick)
+        self.pomodoro_timer.timeout.connect(
+            lambda: self._guarded("_pomodoro_tick", self._pomodoro_tick)
+        )
         if self.config.get("pomodoro_enabled"):
             self.pomodoro.start(self.now_ms())
             self.pomodoro_timer.start(POMODORO_TICK_MS)
@@ -237,13 +258,59 @@ class PetWindow(QLabel):
             self._sync_focus_with_pomodoro()
 
         self.fullscreen_timer = QTimer(self)
-        self.fullscreen_timer.timeout.connect(self._check_fullscreen)
+        self.fullscreen_timer.timeout.connect(
+            lambda: self._guarded("_check_fullscreen", self._check_fullscreen)
+        )
         if self.config.get("hide_on_fullscreen"):
             self.fullscreen_timer.start(1000)
 
     # ------------------------------------------------------------------
     # Vong lap hanh vi (Giai doan 3)
     # ------------------------------------------------------------------
+    def _guarded(self, name, func, *args):
+        """Chay mot ham trong timer, nuot loi de app khong chet.
+
+        Timer cua Qt khong co cho bat loi: mot exception trong ``timeout`` se
+        thoat khoi vong lap su kien va tat app. Voi pet trang tri thi dung han
+        la qua dat, nen ghi lai loi roi tiep tuc chay.
+
+        Chan vong lap loi lien tuc: qua nhieu loi trong 10 giay thi dung timer
+        de khong dot CPU.
+        """
+        now = time.monotonic()
+        try:
+            func(*args)
+        except Exception:
+            import traceback
+
+            # Cua so 10 giay: dem lai tu dau khi da qua lau.
+            if now - self._error_window_start > 10.0:
+                self._error_window_start = now
+                self._error_count = 0
+
+            self._error_count += 1
+            self._last_error = f"{name}: {traceback.format_exc(limit=2)}"
+
+            # Chi in lan dau cua moi dot loi de log khong bi don rac.
+            if self._error_count == 1:
+                print(
+                    f"[lỗi] {name} gặp sự cố, pet vẫn tiếp tục chạy:",
+                    file=sys.stderr,
+                )
+                traceback.print_exc()
+
+            # Loi lap lai qua nhieu: dung timer nay de khong dot CPU.
+            if self._error_count >= 50 and not self._error_paused:
+                self._error_paused = True
+                print(
+                    f"[cảnh báo] {name} lỗi liên tục {self._error_count} lần, "
+                    "tạm dừng vòng lặp để không ngốn CPU.",
+                    file=sys.stderr,
+                )
+            if self._error_count >= 50:
+                return False
+        return True
+
     def _behavior_tick(self):
         """Goi moi 100ms: quyet dinh pet tu lam gi."""
         if self.config.get("animation_paused") or not self.config.get("visible"):
@@ -262,8 +329,10 @@ class PetWindow(QLabel):
 
     def _on_state_changed(self, previous, current):
         """Phan ung khi trang thai doi: doi animation va bat/tat timer."""
-        self._apply_state_animation(current)
-        self._sync_state_timers(previous, current)
+        if not self._guarded("_apply_state_animation", self._apply_state_animation, current):
+            # GIF loi lien tuc: quay ve idle, dung cao hon.
+            return
+        self._guarded("_sync_state_timers", self._sync_state_timers, previous, current)
         print(f"[state] {previous} -> {current} ({self.machine.reason})")
 
     def _apply_state_animation(self, state_name):
@@ -546,6 +615,9 @@ class PetWindow(QLabel):
         cfg = self.config
         cleaned = gif_library.existing_entries(cfg.get("gif_list"), BASE_DIR)
         cfg.data["gif_list"] = cleaned
+        # Giai phong QMovie cua file da bi xoa/khoi thu vien.
+        if hasattr(self, "_movie_cache"):
+            self._prune_movie_cache()
         return cleaned
 
     def set_state(self, state):
@@ -570,12 +642,48 @@ class PetWindow(QLabel):
         self._apply_movie(path)
         return True
 
+    def _movie_for(self, resolved_path):
+        """Lay QMovie cua mot duong dan, tao moi chi lan dau tien.
+
+        QMovie khong giai phong het tai nguyen C++ khi bi huy, nen tao/huy lien
+        tuc lam RSS phinh khoang 1.3 MB moi lan: doi GIF 600 lan la mat ~1.5 GB.
+        Vi vay giu cache theo duong dan va tai su dung lai.
+        """
+        movie = self._movie_cache.get(resolved_path)
+        if movie is not None:
+            return movie
+        movie = QMovie(resolved_path)
+        # GIF hong: khong cache de lan sau con thu lai duoc sau khi sua file.
+        if not movie.isValid():
+            return None
+        self._movie_cache[resolved_path] = movie
+        return movie
+
+    def _prune_movie_cache(self):
+        """Bo cache cua GIF da bi xoa hoac hong, giai phong bo nho."""
+        dead = [p for p in self._movie_cache if not gif_library.is_valid_gif(p)]
+        for path in dead:
+            movie = self._movie_cache.pop(path)
+            if movie is self.movie:
+                # Con dang hien thi thi de QLabel nha ra truoc da.
+                if self.label is not None:
+                    self.label.setMovie(None)
+                self.movie = None
+            movie.stop()
+            movie.deleteLater()
+
     def _apply_movie(self, resolved_path):
         """Thay animation ma khong dung lai cua so hay vi tri."""
-        old_movie = self.movie
-        movie = QMovie(resolved_path)
-        if not movie.isValid():
+        movie = self._movie_for(resolved_path)
+        if movie is None:
             return False
+
+        old_movie = self.movie
+        if old_movie is movie:
+            # Cung mot GIF: chi can dam bao dang chay, khong dung toi kich thuoc.
+            if not self.config.get("animation_paused") and movie.state() != QMovie.Running:
+                movie.start()
+            return True
 
         if self.label is None:
             self.label = QLabel(self)
@@ -595,9 +703,9 @@ class PetWindow(QLabel):
         else:
             movie.start()
 
+        # Movie cu van nam trong cache de tai su dung: chi tam dung.
         if old_movie is not None and old_movie is not movie:
             old_movie.stop()
-            old_movie.deleteLater()
 
         if self.tray is not None:
             self.tray.setIcon(self._tray_icon())
@@ -1199,7 +1307,30 @@ class PetWindow(QLabel):
             self.tray.hide()
         self.app.quit()
 
+    def _release_movies(self):
+        """Dung va nha het QMovie. Goi truoc khi cua so bi huy.
+
+        Neu de Qt huy cua so truoc roi moi huy QMovie (hoac nguoc lai), QMovie
+        con dang chay se goi vao QLabel da chet -> segfault. Phai dung han va
+        go tham chieu tu QLabel truoc.
+        """
+        if self.label is not None:
+            self.label.setMovie(None)
+        for movie in list(self._movie_cache.values()):
+            movie.stop()
+            movie.deleteLater()
+        self._movie_cache.clear()
+        if self.movie is not None:
+            self.movie.stop()
+        self.movie = None
+
     def closeEvent(self, event):
+        # Tat het timer truoc khi nha tai nguyen: tranh tick vao luc dang don.
+        for timer in (self.switch_timer, self.behavior_timer, self.walk_timer,
+                      self.fall_timer, self.state_timer, self.pomodoro_timer,
+                      self.fullscreen_timer):
+            timer.stop()
+        self._release_movies()
         self.config.save()
         if self.tray is not None:
             self.tray.hide()

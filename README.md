@@ -88,6 +88,34 @@ sudo apt install libxcb-xinerama0 libxcb-cursor0 libxkbcommon-x11-0
 ./run.sh --headless   # khởi động không màn hình, để kiểm tra code
 ```
 
+## An toàn: không làm treo máy
+
+App này chỉ vẽ một GIF nên rất nhẹ (đo thật: **~60 MB RAM, ~19% CPU một nhân
+khi pet di chuyển**). Nhưng vẫn có ba lớp chặn để một lỗi không kéo cả máy xuống:
+
+**1. Giới hạn RAM do `run.sh` đặt (mặc định 700 MB)**
+
+```bash
+./run.sh                          # trần 700 MB
+GIFPET_MAX_RAM_MB=400 ./run.sh    # chặt hơn
+GIFPET_MAX_RAM_MB=0 ./run.sh      # tắt giới hạn
+```
+
+Vượt trần thì chỉ tiến trình pet bị kernel dừng, hệ thống không ảnh hưởng.
+
+**2. Lỗi trong vòng lặp không làm chết app**
+
+Mọi timer (đổi GIF, đi lại, rơi, Pomodoro, kiểm tra fullscreen) đều chạy qua một
+lớp bọc: lỗi được ghi log rồi bỏ qua, pet chạy tiếp. Nếu cùng một chỗ lỗi hơn
+50 lần trong 10 giây thì vòng lặp đó tự dừng để không đốt CPU.
+
+**3. Không rò rỉ bộ nhớ khi đổi GIF**
+
+`QMovie` của Qt **không** giải phóng hết bộ nhớ khi bị huỷ. Tạo mới mỗi lần đổi
+GIF làm RAM tăng ~1.3 MB/lần — đổi 600 lần là mất **1.5 GB**. App giữ một cache
+theo đường dẫn và tái sử dụng, đo lại 600 lần đổi chỉ tốn 13 MB.
+Có test hồi quy khoá lại hành vi này (`tests/test_stability.py`).
+
 Thủ công:
 
 ```bash
