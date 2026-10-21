@@ -15,3 +15,4 @@ build/
 secrets.json
 memory.json
 .env
+reminders.json

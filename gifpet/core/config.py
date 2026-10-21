@@ -67,6 +67,8 @@ DEFAULTS = {
     "ai_used_today": 0,
     "ai_used_date": "",
     "ai_proactive": False,
+    # Tran rieng cho "pet tu noi", thap hon ai_daily_limit nhieu.
+    "ai_proactive_limit": 10,
 }
 
 

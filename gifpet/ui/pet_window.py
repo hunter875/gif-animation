@@ -35,10 +35,12 @@ from gifpet.core import behavior as behavior_module
 from gifpet.core import falling
 from gifpet.core import gif_library, paths, pet_pack
 from gifpet.core import pomodoro as pomodoro_module
+from gifpet.core import proactive as proactive_module
+from gifpet.core import reminders as reminders_module
 from gifpet.core import screen_utils
 from gifpet.core import state as state_module
 from gifpet.core.config import Config
-from gifpet.ui import gif_player, pet_actions, tray_menu, window_skin
+from gifpet.ui import gif_player, pet_actions, pet_runtime, tray_menu, window_skin
 from gifpet.ui.dialogs import ResizeDialog, SettingsDialog
 from gifpet.ui.gif_library_dialog import GifLibraryDialog
 from gifpet.ui.speech_bubble import SpeechBubble
@@ -47,6 +49,8 @@ from gifpet.ui.speech_bubble import SpeechBubble
 BASE_DIR = paths.PROJECT_ROOT
 WALK_INTERVAL_MS = 40
 WALK_STEP = 2
+# Quet loi nhac hen gio 5 giay mot lan: du chinh xac cho loi nhac phut.
+REMINDER_TICK_MS = 5000
 
 # Nhip chay cua vong lap hanh vi (ms).
 BEHAVIOR_TICK_MS = 100
@@ -89,6 +93,13 @@ class PetWindow(QLabel):
         self.brain = Brain(self.config)
         # Cau hoi dang cho nguoi dung xac nhan (hanh dong co tac dung phu).
         self._pending_action = None
+        # Hang doi loi nhac luu ben (core/reminders.py).
+        self.reminders = reminders_module.Reminders()
+        # Gom su kien cho "pet tu noi" (core/proactive.py). Chi co tac dung
+        # khi ca ai_enabled va ai_proactive deu bat.
+        self.proactive = proactive_module.ProactiveBatcher(self.config)
+        # Danh dau da ghi nhan "ranh qua lau", tranh them su kien moi 100ms.
+        self._long_idle_noted = False
 
         # May trang thai va bo dieu phoi hanh vi (Giai doan 3).
         self.machine = state_module.StateMachine(
@@ -269,6 +280,40 @@ class PetWindow(QLabel):
         if self.config.get("hide_on_fullscreen"):
             self.fullscreen_timer.start(1000)
 
+        # Loi nhac hen gio: quet moi 5 giay. Khong dung singleShot vi hen 30
+        # phut roi tat app la mat; xem core/reminders.py.
+        self.reminder_timer = QTimer(self)
+        self.reminder_timer.timeout.connect(
+            lambda: self._guarded("_check_reminders", self._check_reminders)
+        )
+        self.reminder_timer.start(REMINDER_TICK_MS)
+        # Loi nhac qua han qua lau (mo app sau nhieu ngay) bi bo, khong do ra
+        # mot loat thong bao cung luc.
+        self._guarded("_drop_stale_reminders", self._drop_stale_reminders)
+
+    # ------------------------------------------------------------------
+    # Loi nhac va pet tu noi
+    # ------------------------------------------------------------------
+    def _collect_proactive(self):
+        """Gom su kien va goi model khi du dieu kien. Xem ``pet_runtime``."""
+        pet_runtime.collect(self)
+
+    def _drop_stale_reminders(self):
+        """Bo loi nhac qua han qua lau. Xem ``pet_runtime``."""
+        pet_runtime.drop_stale(self)
+
+    def _check_reminders(self):
+        """Noi cac loi nhac den gio. Xem ``pet_runtime``."""
+        pet_runtime.check_due(self)
+
+    def remind_later(self, text, seconds):
+        """Hen nhac, luu ra dia. Xem ``pet_runtime``."""
+        return pet_runtime.remind_later(self, text, seconds)
+
+    def pending_reminders(self):
+        """So loi nhac dang cho."""
+        return pet_runtime.pending_count(self)
+
     # ------------------------------------------------------------------
     # Vong lap hanh vi (Giai doan 3)
     # ------------------------------------------------------------------
@@ -320,6 +365,7 @@ class PetWindow(QLabel):
         """Goi moi 100ms: quyet dinh pet tu lam gi."""
         if self.config.get("animation_paused") or not self.config.get("visible"):
             return
+        self._guarded("_collect_proactive", self._collect_proactive)
         if self._hidden_for_fullscreen or not self.config.get("auto_walk"):
             # Van cho ngu du khong bat tu di.
             if self.machine.state == state_module.IDLE and not self.config.get("auto_walk"):
@@ -978,7 +1024,7 @@ class PetWindow(QLabel):
         # Tat het timer truoc khi nha tai nguyen: tranh tick vao luc dang don.
         for timer in (self.switch_timer, self.behavior_timer, self.walk_timer,
                       self.fall_timer, self.state_timer, self.pomodoro_timer,
-                      self.fullscreen_timer):
+                      self.fullscreen_timer, self.reminder_timer):
             timer.stop()
         self._release_movies()
         self.config.save()

@@ -11,7 +11,7 @@ Rang buoc bao mat (docs/SECURITY.md):
 - Hanh dong co tac dung phu phai duoc nguoi dung dong y.
 """
 
-from PyQt5.QtCore import QTimer, QUrl
+from PyQt5.QtCore import QUrl
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import QMessageBox
 
@@ -100,8 +100,11 @@ def run_action(window, name, params):
     elif name == "remind":
         minutes = int(params.get("in_minutes", 1))
         text = params.get("text", "")
-        QTimer.singleShot(minutes * 60 * 1000, lambda: window.announce(text, 8000))
-        window.announce(f"Nhắc sau {minutes} phút nhé.", duration_ms=3000)
+        # Luu ra file: hen 30 phut roi tat app thi van con.
+        if window.reminders.add(text, minutes * 60):
+            window.announce(f"Nhắc sau {minutes} phút nhé.", duration_ms=3000)
+        else:
+            window.announce("Không lưu được lời nhắc.", duration_ms=3000)
     elif name == "open_url":
         open_url(window, params.get("url", ""))
 

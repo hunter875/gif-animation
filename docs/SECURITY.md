@@ -418,33 +418,29 @@ chế còn lại, để không ai đọc tài liệu rồi tưởng nhiều hơn
 | Provider có timeout | `gifpet/ai/provider.py` | 20 giây, key trong header |
 | Test | `tests/test_ai.py` | 64 test, không gọi mạng thật |
 
+### Đã sửa sau bản đầu
+
+- **`remind` giờ sống qua lần tắt app** — lưu `reminders.json`, quét mỗi 5
+  giây, bỏ lời nhắc quá hạn >24h (`core/reminders.py`).
+- **`ai_proactive` giờ có tác dụng** — gom sự kiện 60 giây, trần riêng 10
+  lượt/ngày, không chạy trong giờ tập trung (`core/proactive.py`).
+
 ### Hạn chế đã biết
 
 Ghi rõ để không hiểu nhầm là đã hoàn hảo:
 
-1. **`remind` không sống qua lần tắt app.** Dùng `QTimer.singleShot`, nên
-   lời nhắc đã hẹn sẽ mất nếu đóng app. Muốn bền thì phải lưu vào file và
-   kiểm lại lúc khởi động — chưa làm.
-
-2. **Chưa có gom sự kiện (batching).** `ai_proactive` cho phép pet tự nói,
-   nhưng chưa có cơ chế gộp sự kiện trong 60 giây như thiết kế mục 4.2. Hiện
-   tại chỉ gọi khi người dùng mở "Hỏi pet".
-
-3. **Chưa cắt `in_minutes` theo ngày làm việc.** Hẹn tối đa 24 giờ, nhưng nếu
-   app tắt thì mất (xem mục 1).
-
-4. **Chưa kiểm tra chéo response của provider.** Tin vào đúng cấu trúc JSON
+1. **Chưa kiểm tra chéo response của provider.** Tin vào đúng cấu trúc JSON
    của Groq/Gemini; nếu họ đổi schema, `ProviderError("bad_response")` và pet
    báo lỗi, không crash — nhưng không tự phát hiện được.
 
-5. **Chưa có xác thực chứng chỉ tuỳ chỉnh.** Dùng CA mặc định của hệ thống.
+2. **Chưa có xác thực chứng chỉ tuỳ chỉnh.** Dùng CA mặc định của hệ thống.
    Môi trường có proxy chèn chứng chỉ sẽ không kết nối được.
 
-6. **`open_url` mở bằng trình duyệt mặc định** qua `QDesktopServices`. Nếu hệ
+3. **`open_url` mở bằng trình duyệt mặc định** qua `QDesktopServices`. Nếu hệ
    thống đã bị chiếm quyền, trình duyệt mặc định có thể là thứ khác — ngoài
    phạm vi app kiểm soát được.
 
-7. **Chưa có giới hạn theo chi phí tiền tệ**, chỉ giới hạn theo số lượt và độ
+4. **Chưa có giới hạn theo chi phí tiền tệ**, chỉ giới hạn theo số lượt và độ
    dài. Nếu nhà cung cấp đổi giá, trần tiền vẫn chưa được tính.
 
 ### Kiểm chứng

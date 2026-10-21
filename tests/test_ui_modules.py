@@ -45,6 +45,9 @@ class WindowCase(unittest.TestCase):
 
     def setUp(self):
         self.window = PetWindow(app(), Config())
+        # Loi nhac luu o file dung chung: xoa truoc moi test de khong dinh
+        # trang thai cua test truoc.
+        self.window.reminders.clear()
         pump()
 
     def tearDown(self):
@@ -121,14 +124,51 @@ class TestPetActions(WindowCase):
         finally:
             pet_actions.QDesktopServices.openUrl = original
 
-    def test_remind_khong_doi_khi_dong_app(self):
-        """QTimer.singleShot phai an toan khi app dong truoc gio hen."""
+    def test_remind_luu_ra_file_khong_dung_timer(self):
+        """Loi nhac phai luu ben: hen 30 phut roi tat app van con."""
+        from gifpet.core.reminders import Reminders
+
         pet_actions.run_action(
-            self.window, "remind", {"text": "uống nước", "in_minutes": 1}
+            self.window, "remind", {"text": "uống nước", "in_minutes": 30}
         )
         pump()
-        # Khong nem loi, va khong lam hong state.
-        self.assertTrue(True)
+        # Doc lai bang object moi: khong dung trang thai trong bo nho.
+        saved = Reminders().all()
+        self.assertEqual(len(saved), 1)
+        self.assertEqual(saved[0]["text"], "uống nước")
+
+    def test_remind_co_bao_cho_nguoi_dung(self):
+        pet_actions.run_action(
+            self.window, "remind", {"text": "uống nước", "in_minutes": 5}
+        )
+        pump()
+        self.assertIsNotNone(self.window.bubble)
+        self.assertEqual(self.window.pending_reminders(), 1)
+
+    def test_check_reminders_noi_khi_den_gio(self):
+        """Timer quet phai lay ra va noi loi nhac den gio."""
+        self.window.reminders.add("đến giờ rồi", 0.01)
+        import time
+
+        time.sleep(0.05)
+        self.window._check_reminders()
+        pump()
+        # Da lay ra khoi hang doi.
+        self.assertEqual(self.window.pending_reminders(), 0)
+
+    def test_drop_stale_khi_khoi_dong(self):
+        """Loi nhac cu qua 24h bi bo, khong do ra mot loat thong bao."""
+        self.window.reminders.add("cũ", 0.01)
+        # Gia lap loi nhac tu 3 ngay truoc.
+        items = self.window.reminders.all()
+        items[0]["due"] -= 3 * 24 * 3600
+        self.window.reminders._write(items)
+        self.window._drop_stale_reminders()
+        self.assertEqual(self.window.pending_reminders(), 0)
+
+    def test_proactive_tat_mac_dinh(self):
+        """ai_proactive mac dinh tat: khong goi model khi pet ranh."""
+        self.assertFalse(self.window.proactive.enabled())
 
 
 # ----------------------------------------------------------------------

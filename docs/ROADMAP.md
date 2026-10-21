@@ -73,23 +73,29 @@ Quy ước: ✅ xong và có test · 🟡 xong một phần · ⛔ chưa làm ·
 
 ---
 
+### Lời nhắc bền qua lần tắt app ✅
+
+Trước: `QTimer.singleShot` chỉ sống trong tiến trình — hẹn 30 phút rồi tắt app
+là mất, không báo gì.
+
+Nay: `core/reminders.py` lưu ra `reminders.json`, ghi atomic. `PetWindow` có
+`reminder_timer` quét mỗi 5 giây. Lời nhắc quá hạn quá 24 giờ bị bỏ (mở app sau
+nhiều ngày không đổ ra một loạt thông báo).
+Bằng chứng: `test_reminders.py` (26 test) + `test_ui_modules.py` 5 test tích hợp.
+
+### Pet tự nói (`ai_proactive`) có tác dụng ✅
+
+Trước: cờ có trong config, Cài đặt có checkbox, nhưng **không có gì đọc nó**.
+
+Nay: `core/proactive.py:ProactiveBatcher` gom sự kiện trong cửa sổ 60 giây,
+trần riêng 10 lượt/ngày (thấp hơn `ai_daily_limit`), không chạy trong giờ tập
+trung. Chỉ nhận `long_idle`; pet đi/rơi/ngủ/click không bao giờ vào hàng đợi.
+Đo được: 200 tick liên tiếp khi rảnh → **0 lần** gọi model (chỉ 1 lần sau khi
+qua cửa sổ).
+
+---
+
 ## Đang có vấn đề, nên làm sớm
-
-### 🔴 `remind` mất khi tắt app
-
-`pet_actions.run_action` dùng `QTimer.singleShot`. Hẹn 30 phút rồi tắt app là
-mất lời nhắc, không báo gì.
-
-**Sửa:** lưu vào `reminders.json`, kiểm lại lúc khởi động, có timer quét mỗi
-phút. Ước lượng: ~80 dòng + 10 test.
-
-### 🟡 Chưa có gom sự kiện cho `ai_proactive`
-
-Thiết kế có (gộp sự kiện trong 60 giây) nhưng chưa code. Hiện `ai_proactive`
-chỉ là cờ chưa có tác dụng.
-
-**Sửa:** hàng đợi sự kiện + cửa sổ thời gian, hoặc bỏ hẳn cờ này cho khỏi gây
-hiểu nhầm. Ước lượng: ~60 dòng.
 
 ### 🟡 Chưa kiểm thử trên máy có màn hình thật
 
@@ -192,7 +198,7 @@ Kiến trúc hiện tại một `PetWindow` = một pet. Muốn nhiều pet ph�
 
 ```bash
 ./run.sh                  # chạy app
-./run.sh --test           # toàn bộ test (243 test)
+./run.sh --test           # toàn bộ test (273 test)
 ./run.sh --accept         # 17 tiêu chí nghiệm thu
 ./run.sh --phase3         # 16 bước vòng đời pet
 .venv/bin/python -m pyflakes gifpet/    # kiểm tra import thừa

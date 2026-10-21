@@ -199,7 +199,8 @@ Cấu trúc:
 | `tests/test_pomodoro.py` | 32 test nhắc tập trung / nghỉ |
 | `tests/test_speech_bubble.py` | 14 test bong bóng thoại |
 | `tests/test_stability.py` | 10 test chống rò rỉ bộ nhớ / chống treo |
-| `tests/test_ui_modules.py` | 21 test module UI đã tách |
+| `tests/test_ui_modules.py` | 25 test module UI đã tách |
+| `tests/test_reminders.py` | 26 test lời nhắc bền + pet tự nói |
 | `tests/test_security.py` | 19 test khoá ràng buộc bảo mật |
 | `tests/test_ai.py` | 64 test cho trợ lý AI (không gọi mạng thật) |
 | `tests/test_acceptance.py` | 17 tiêu chí nghiệm thu |
@@ -214,7 +215,7 @@ Cấu trúc:
 Chạy test:
 
 ```bash
-./run.sh --test      # tất cả 243 test đơn vị
+./run.sh --test      # tất cả 273 test đơn vị
 ./run.sh --accept    # 17 tiêu chí nghiệm thu
 ./run.sh --phase3    # 16 bước vòng đời Giai đoạn 3
 # hoặc
