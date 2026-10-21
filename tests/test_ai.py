@@ -17,8 +17,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="gifpet-ai-test-")
 
 from gifpet.ai import actions, memory as memory_module, provider, secrets  # noqa: E402
-from gifpet.ai.brain import Brain, build_user_content, extract_json  # noqa: E402
-from gifpet.ai.quota import Quota, today  # noqa: E402
+from gifpet.ai.brain import Brain, extract_json  # noqa: E402
+from gifpet.ai.quota import Quota  # noqa: E402
 from gifpet.core.config import Config  # noqa: E402
 
 

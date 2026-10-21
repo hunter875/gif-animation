@@ -3,7 +3,7 @@
 import os
 
 from PyQt5.QtCore import Qt, QSize
-from PyQt5.QtGui import QIcon, QMovie, QPixmap
+from PyQt5.QtGui import QIcon, QMovie
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QDialog,

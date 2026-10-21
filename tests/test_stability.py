@@ -15,7 +15,6 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 # Khong ghi vao cau hinh that cua nguoi dung.
 os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="gifpet-test-")
 
-from PyQt5.QtCore import QSize  # noqa: E402
 from PyQt5.QtGui import QMovie  # noqa: E402
 from PyQt5.QtWidgets import QApplication  # noqa: E402
 

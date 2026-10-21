@@ -1,6 +1,5 @@
 """Cac dialog cai dat: kich thuoc giu ti le, va cai dat chung."""
 
-from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QCheckBox,
     QComboBox,

@@ -199,7 +199,8 @@ Cấu trúc:
 | `tests/test_pomodoro.py` | 32 test nhắc tập trung / nghỉ |
 | `tests/test_speech_bubble.py` | 14 test bong bóng thoại |
 | `tests/test_stability.py` | 10 test chống rò rỉ bộ nhớ / chống treo |
-| `tests/test_security.py` | 17 test khoá ràng buộc bảo mật |
+| `tests/test_ui_modules.py` | 21 test module UI đã tách |
+| `tests/test_security.py` | 19 test khoá ràng buộc bảo mật |
 | `tests/test_ai.py` | 64 test cho trợ lý AI (không gọi mạng thật) |
 | `tests/test_acceptance.py` | 17 tiêu chí nghiệm thu |
 | `tests/test_phase3_flow.py` | 16 bước vòng đời Giai đoạn 3 |
@@ -208,11 +209,12 @@ Cấu trúc:
 | `tools/slim_binary.sh` | Dọn Qt plugin không dùng |
 | `docs/ARCHITECTURE.md` | Kiến trúc và vị trí code từng giai đoạn |
 | `docs/SECURITY.md` | Ràng buộc bảo mật và trạng thái triển khai AI |
+| `docs/ROADMAP.md` | Việc đã xong, đang làm, chưa làm |
 
 Chạy test:
 
 ```bash
-./run.sh --test      # tất cả test đơn vị (83 + 64 + 32 + 17 + 14 + 10)
+./run.sh --test      # tất cả 243 test đơn vị
 ./run.sh --accept    # 17 tiêu chí nghiệm thu
 ./run.sh --phase3    # 16 bước vòng đời Giai đoạn 3
 # hoặc

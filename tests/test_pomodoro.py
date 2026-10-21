@@ -16,7 +16,6 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt5.QtWidgets import QApplication  # noqa: E402
 
 from gifpet.core import pomodoro as pomodoro_module  # noqa: E402
-from gifpet.core import state as state_module  # noqa: E402
 from gifpet.core.config import Config  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])

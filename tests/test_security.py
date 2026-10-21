@@ -116,7 +116,10 @@ class TestNoArbitraryExecution(unittest.TestCase):
         r"\b__import__\s*\(",
     )
 
-    def test_chi_co_mot_cho_goi_subprocess(self):
+    # File duy nhat duoc phep goi subprocess: doc trang thai fullscreen.
+    SUBPROCESS_ALLOWED = os.path.join("gifpet", "ui", "window_skin.py")
+
+    def test_chi_window_skin_goi_subprocess(self):
         """Chi duoc dung subprocess o dung mot cho: doc trang thai fullscreen."""
         hits = []
         for path in source_files():
@@ -124,19 +127,31 @@ class TestNoArbitraryExecution(unittest.TestCase):
                 for pattern in self.DANGEROUS:
                     if re.search(pattern, line):
                         hits.append((os.path.relpath(path, ROOT), line_no, line.strip()))
-        # Cho phep duy nhat: xprop trong pet_window.
-        unexpected = [
-            h for h in hits
-            if not (h[0].endswith("pet_window.py") and "subprocess" in h[2])
-        ]
+        unexpected = [h for h in hits if h[0] != self.SUBPROCESS_ALLOWED]
         self.assertEqual(unexpected, [], f"goi lenh ngoai du kien: {unexpected}")
+
+    def test_chi_mot_loi_goi_subprocess_trong_window_skin(self):
+        """Trong window_skin chi co dung mot loi goi subprocess.run."""
+        text = read(os.path.join(ROOT, self.SUBPROCESS_ALLOWED))
+        self.assertEqual(
+            text.count("subprocess.run("), 1,
+            "window_skin chi duoc co mot loi goi subprocess.run",
+        )
 
     def test_xprop_dung_danh_sach_tham_so_co_dinh(self):
         """xprop phai nhan list, khong nhan chuoi qua shell."""
-        text = read(os.path.join(PACKAGE, "ui", "pet_window.py"))
+        text = read(os.path.join(ROOT, self.SUBPROCESS_ALLOWED))
         self.assertIn('["xprop"] + args', text,
                       "xprop phai goi bang list, khong qua shell=True")
-        self.assertNotIn("shell=True", text, "khong duoc dung shell=True")
+
+    def test_khong_co_shell_true_o_bat_ky_dau(self):
+        """shell=True cho phep chen lenh - khong duoc xuat hien trong ca package."""
+        offenders = []
+        for path in source_files():
+            text = read(path)
+            if "shell=True" in text:
+                offenders.append(os.path.relpath(path, ROOT))
+        self.assertEqual(offenders, [], f"co shell=True: {offenders}")
 
 
 class TestSecretsIsolation(unittest.TestCase):

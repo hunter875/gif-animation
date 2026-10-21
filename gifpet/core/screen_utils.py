@@ -5,7 +5,7 @@ phu, hoac copy cau hinh tu may co do phan giai khac) thi keo pet ve man hinh
 chinh.
 """
 
-from PyQt5.QtCore import QPoint, QRect
+from PyQt5.QtCore import QRect
 
 
 def screen_rects(app):

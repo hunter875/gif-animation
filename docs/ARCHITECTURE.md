@@ -22,7 +22,11 @@ gif-animation/
 │   │   └── pomodoro.py         # nhắc tập trung / nghỉ (uống nước, nghỉ mắt)
 │   │
 │   ├── ui/                     # giao diện PyQt5
-│   │   ├── pet_window.py       # cửa sổ pet, menu khay, phím tắt
+│   │   ├── pet_window.py       # cửa sổ pet: chuột, phím tắt, phối hợp
+│   │   ├── gif_player.py       # QMovie, cache, kích thước, nạp GIF
+│   │   ├── window_skin.py      # cờ cửa sổ, click xuyên, fullscreen (X11)
+│   │   ├── tray_menu.py        # khay hệ thống, menu, thông báo
+│   │   ├── pet_actions.py      # NƠI DUY NHẤT thực thi hành động
 │   │   ├── dialogs.py          # dialog resize và cài đặt
 │   │   ├── gif_library_dialog.py  # thư viện GIF có thumbnail
 │   │   └── speech_bubble.py    # bong bóng thoại của pet
@@ -53,7 +57,8 @@ gif-animation/
 │   ├── test_pomodoro.py        # 32 test nhắc tập trung / nghỉ
 │   ├── test_speech_bubble.py   # 14 test bong bóng thoại
 │   ├── test_stability.py       # 10 test chống rò rỉ bộ nhớ / chống treo
-│   ├── test_security.py        # 17 test khoá ràng buộc bảo mật
+│   ├── test_security.py        # 19 test khoá ràng buộc bảo mật
+│   ├── test_ui_modules.py      # 21 test module UI đã tách
 │   ├── test_ai.py              # 64 test trợ lý AI (provider giả)
 │   ├── test_acceptance.py      # 17 tiêu chí nghiệm thu
 │   └── test_phase3_flow.py     # 16 bước vòng đời Giai đoạn 3
@@ -65,7 +70,8 @@ gif-animation/
 │
 ├── docs/
 │   ├── ARCHITECTURE.md         # file này
-│   └── SECURITY.md             # ràng buộc bảo mật Giai đoạn 4
+│   ├── SECURITY.md             # ràng buộc bảo mật Giai đoạn 4
+│   └── ROADMAP.md              # việc đã xong / chưa làm
 │
 ├── run.sh                      # chạy app / test / nghiệm thu
 ├── requirements.txt
@@ -184,6 +190,28 @@ gây segfault.
 
 Khoá lại bằng `tests/test_stability.py` (10 test), gồm cả đo RSS thật để phát
 hiện rò rỉ tái phát.
+
+## Cấu trúc `ui/`: vì sao tách
+
+Ban đầu mọi thứ nằm trong `pet_window.py` (1467 dòng, 85 method, 9 nhóm trách
+nhiệm). Đó là God Object: thêm một mục menu phải mở cùng file với logic kéo
+thả, fullscreen và AI. Đã tách thành:
+
+| File | Dòng | Trách nhiệm |
+|---|---|---|
+| `pet_window.py` | ~1000 | cửa sổ, chuột, phím tắt, vòng đời, phối hợp |
+| `ui/gif_player.py` | 216 | QMovie, cache, kích thước, nạp GIF |
+| `ui/tray_menu.py` | 240 | khay, menu, thông báo khay |
+| `ui/window_skin.py` | 174 | cờ cửa sổ, click xuyên, fullscreen |
+| `ui/pet_actions.py` | 122 | thực thi hành động (một chỗ duy nhất) |
+
+**Cách ghép:** hàm nhận `window` làm tham số đầu, không kế thừa. `pet_window`
+import các module này; chiều ngược lại không, nên không có vòng import.
+Các method trên `PetWindow` còn lại là lớp mỏng chuyển tiếp.
+
+**Lợi ích đo được:** `test_ui_modules.py` (21 test) kiểm tra được menu, cờ cửa
+sổ, chặn URL, mà trước đây phải dựng cả app. `pet_actions.py` là nơi duy nhất
+review về "app làm được gì".
 
 ## Cấu hình người dùng
 

@@ -16,38 +16,29 @@ Trang thai hanh vi (idle/walk/drag/fall/sleep/react/talk) hien moi o muc co ban:
 du voi quy tac uu tien se nam o ``gifpet/core/state.py`` (Giai doan 3).
 """
 
-import os
 import random
 import sys
 import time
 
-from PyQt5.QtCore import QPoint, QRect, QSize, Qt, QTimer
-from PyQt5.QtGui import QIcon, QKeySequence, QMovie, QRegion
+from PyQt5.QtCore import QPoint, QRect, Qt, QTimer
+from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import (
-    QAction,
-    QApplication,
     QDialog,
-    QDialogButtonBox,
     QInputDialog,
     QLabel,
-    QMenu,
-    QMessageBox,
-    QPushButton,
     QShortcut,
-    QSystemTrayIcon,
-    QVBoxLayout,
 )
 
+from gifpet.ai import secrets as ai_secrets
+from gifpet.ai.brain import Brain
 from gifpet.core import behavior as behavior_module
 from gifpet.core import falling
 from gifpet.core import gif_library, paths, pet_pack
 from gifpet.core import pomodoro as pomodoro_module
 from gifpet.core import screen_utils
 from gifpet.core import state as state_module
-from gifpet.ai import actions as ai_actions
-from gifpet.ai import secrets as ai_secrets
-from gifpet.ai.brain import Brain
 from gifpet.core.config import Config
+from gifpet.ui import gif_player, pet_actions, tray_menu, window_skin
 from gifpet.ui.dialogs import ResizeDialog, SettingsDialog
 from gifpet.ui.gif_library_dialog import GifLibraryDialog
 from gifpet.ui.speech_bubble import SpeechBubble
@@ -90,6 +81,9 @@ class PetWindow(QLabel):
         self._current_resolved_path = None
         self.pack = None
         self.packs = []
+        # Goc project de cac module phu (gif_player, tray_menu) giai duong dan
+        # tuong doi ma khong phai import paths.
+        self.base_dir = BASE_DIR
 
         # Bo nao AI (Giai doan 4). Khong goi mang khi chua bat ai_enabled.
         self.brain = Brain(self.config)
@@ -203,9 +197,8 @@ class PetWindow(QLabel):
         return cleaned
 
     def _setup_window_flags(self):
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Tool)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self._apply_pin(self.config.get("pin_to_top"), persist=False)
+        """Cua so khong vien, trong suot. Xem ``window_skin``."""
+        window_skin.setup_window_flags(self)
 
     def _setup_shortcuts(self):
         """Phim tat luon dung duoc, ke ca khi bat click xuyen."""
@@ -402,370 +395,74 @@ class PetWindow(QLabel):
             self.behavior.on_landed(self.machine, self.now_ms())
 
     def _setup_tray(self):
-        """Tao icon khay he thong. Khong co tray thi app van chay."""
-        if not QSystemTrayIcon.isSystemTrayAvailable():
-            print("Canh bao: he thong khong co khay. Dung chuot phai tren pet hoac phim tat.")
-            self._build_menu()  # van tao menu de dung lai khi chuot phai
-            return
-
-        icon = self._tray_icon()
-        self.tray = QSystemTrayIcon(icon, self)
-        self.tray.setToolTip("GIF Pet")
-        self.tray.activated.connect(self._on_tray_activated)
-        self._build_menu()
-        self.tray.show()
+        """Tao icon khay he thong. Xem ``tray_menu.setup_tray``."""
+        tray_menu.setup_tray(self)
 
     def _tray_icon(self):
-        icon_path = paths.APP_ICON
-        if os.path.exists(icon_path):
-            icon = QIcon(icon_path)
-            if not icon.isNull():
-                return icon
-        if self.movie is not None:
-            pixmap = self.movie.currentPixmap()
-            if not pixmap.isNull():
-                return QIcon(pixmap)
-        return self.style().standardIcon(self.style().SP_ComputerIcon)
+        """Icon khay. Xem ``tray_menu.tray_icon``."""
+        return tray_menu.tray_icon(self)
 
-    # ------------------------------------------------------------------
-    # Menu
-    # ------------------------------------------------------------------
     def _build_menu(self):
-        """Dung menu mot lan va cap nhat trang thai checkbox khi mo."""
-        self.menu = QMenu(self)
-        self.menu.setStyleSheet(
-            "QMenu { background-color: #333; color: white; }"
-            "QMenu::item:selected { background-color: #555; }"
-        )
-
-        self.action_visible = QAction("Hiện pet", self, checkable=True)
-        self.action_visible.triggered.connect(self.toggle_visible)
-
-        self.action_pause = QAction("Tạm dừng animation", self, checkable=True)
-        self.action_pause.triggered.connect(self.toggle_animation_pause)
-
-        self.action_auto_switch = QAction("Tự động đổi GIF", self, checkable=True)
-        self.action_auto_switch.triggered.connect(self.toggle_auto_switch)
-
-        self.action_walk = QAction("Pet tự đi", self, checkable=True)
-        self.action_walk.triggered.connect(self.toggle_auto_walk)
-
-        self.action_focus = QAction("Chế độ tập trung", self, checkable=True)
-        self.action_focus.setToolTip("Pet đứng yên hoặc ngủ, không tự đi")
-        self.action_focus.triggered.connect(self.toggle_focus_mode)
-
-        self.action_sleep = QAction("Cho pet ngủ ngay", self)
-        self.action_sleep.triggered.connect(self.send_to_sleep)
-
-        # --- Nhac tap trung / nghi ---
-        self.action_pomodoro = QAction("Nhắc tập trung / nghỉ", self, checkable=True)
-        self.action_pomodoro.setToolTip("Pomodoro: nhắc uống nước và thư giãn mắt")
-        self.action_pomodoro.triggered.connect(self.toggle_pomodoro)
-
-        self.pomodoro_menu = QMenu("Đồng hồ tập trung", self)
-        self.action_pomodoro_status = QAction("Chưa bật", self)
-        self.action_pomodoro_status.setEnabled(False)
-
-        self.action_pomodoro_pause = QAction("Tạm dừng đồng hồ", self)
-        self.action_pomodoro_pause.triggered.connect(self.pomodoro_pause)
-
-        self.action_pomodoro_resume = QAction("Chạy tiếp", self)
-        self.action_pomodoro_resume.triggered.connect(self.pomodoro_resume)
-
-        self.action_pomodoro_skip = QAction("Bỏ qua, sang pha tiếp", self)
-        self.action_pomodoro_skip.triggered.connect(self.pomodoro_skip)
-
-        self.action_pomodoro_remind = QAction("Nhắc uống nước ngay", self)
-        self.action_pomodoro_remind.triggered.connect(self.remind_now)
-
-        self.pomodoro_menu.addAction(self.action_pomodoro_status)
-        self.pomodoro_menu.addSeparator()
-        self.pomodoro_menu.addAction(self.action_pomodoro_pause)
-        self.pomodoro_menu.addAction(self.action_pomodoro_resume)
-        self.pomodoro_menu.addAction(self.action_pomodoro_skip)
-        self.pomodoro_menu.addAction(self.action_pomodoro_remind)
-
-        self.action_click_through = QAction("Click xuyên qua pet", self, checkable=True)
-        self.action_click_through.triggered.connect(self.toggle_click_through)
-
-        self.action_pin = QAction("Luôn nổi trên cùng", self, checkable=True)
-        self.action_pin.triggered.connect(lambda: self._apply_pin(not self.config.get("pin_to_top")))
-
-        self.action_hide_fullscreen = QAction(
-            "Ẩn khi có ứng dụng toàn màn hình", self, checkable=True
-        )
-        self.action_hide_fullscreen.triggered.connect(self.toggle_hide_on_fullscreen)
-
-        self.action_chat = QAction("Hỏi pet…", self)
-        self.action_chat.triggered.connect(self.open_chat)
-
-        self.action_library = QAction("Thư viện GIF…", self)
-        self.action_library.triggered.connect(self.open_library)
-
-        self.action_resize = QAction("Chỉnh kích thước…", self)
-        self.action_resize.triggered.connect(self.open_resize)
-
-        self.action_center = QAction("Đưa về giữa màn hình", self)
-        self.action_center.triggered.connect(self.center_on_screen)
-
-        self.action_settings = QAction("Cài đặt…", self)
-        self.action_settings.triggered.connect(self.open_settings)
-
-        self.action_exit = QAction("Thoát", self)
-        self.action_exit.triggered.connect(self.quit_app)
-
-        self.menu.addAction(self.action_visible)
-        self.menu.addAction(self.action_pause)
-        self.menu.addSeparator()
-        self.menu.addAction(self.action_auto_switch)
-        self.menu.addAction(self.action_walk)
-        self.menu.addAction(self.action_focus)
-        self.menu.addAction(self.action_sleep)
-        self.menu.addSeparator()
-        self.menu.addAction(self.action_pomodoro)
-        self.menu.addMenu(self.pomodoro_menu)
-        self.menu.addSeparator()
-        self.menu.addAction(self.action_chat)
-        self.menu.addAction(self.action_click_through)
-        self.menu.addAction(self.action_hide_fullscreen)
-        self.menu.addAction(self.action_pin)
-        self.menu.addSeparator()
-        self.menu.addAction(self.action_library)
-        self.menu.addAction(self.action_resize)
-        self.menu.addAction(self.action_center)
-        self.menu.addAction(self.action_settings)
-        self.menu.addSeparator()
-        self.menu.addAction(self.action_exit)
-
-        if self.tray is not None:
-            self.tray.setContextMenu(self.menu)
+        """Dung menu. Xem ``tray_menu.build_menu``."""
+        tray_menu.build_menu(self)
 
     def _sync_menu(self):
-        self.action_visible.setChecked(bool(self.config.get("visible")))
-        self.action_visible.setText(
-            "Ẩn pet" if self.config.get("visible") else "Hiện pet"
-        )
-        self.action_pause.setChecked(bool(self.config.get("animation_paused")))
-        self.action_auto_switch.setChecked(bool(self.config.get("auto_switch_enabled")))
-        self.action_walk.setChecked(bool(self.config.get("auto_walk")))
-        self.action_focus.setChecked(bool(self.config.get("focus_mode")))
-        self.action_sleep.setEnabled(self.machine.can_sleep())
-
-        # Trang thai dong ho tap trung.
-        self.action_pomodoro.setChecked(bool(self.config.get("pomodoro_enabled")))
-        self.action_pomodoro_status.setText(self.pomodoro_status())
-        active = self.config.get("pomodoro_enabled")
-        self.pomodoro_menu.setEnabled(True)
-        self.action_pomodoro_pause.setEnabled(
-            active and self.pomodoro.phase in ("focus", "break")
-        )
-        self.action_pomodoro_resume.setEnabled(
-            active and self.pomodoro.phase == "paused"
-        )
-        self.action_pomodoro_skip.setEnabled(active)
-        self.action_click_through.setChecked(bool(self.config.get("click_through")))
-        self.action_pin.setChecked(bool(self.config.get("pin_to_top")))
-        self.action_hide_fullscreen.setChecked(bool(self.config.get("hide_on_fullscreen")))
+        """Cap nhat trang thai menu. Xem ``tray_menu.sync_menu``."""
+        tray_menu.sync_menu(self)
 
     def _popup_menu(self, position):
-        self._sync_menu()
-        # Cap nhat dong ho ngay truoc khi hien, de dem nguoc dung.
-        self.action_pomodoro_status.setText(self.pomodoro_status())
-        self.menu.exec_(position)
+        """Hien menu chuot phai tai vi tri."""
+        tray_menu.popup_menu(self, position)
 
     def _on_tray_activated(self, reason):
-        if reason == QSystemTrayIcon.Trigger:
-            self.toggle_visible()
+        """Bam trai vao icon khay."""
+        tray_menu.on_tray_activated(self, reason)
 
     # ------------------------------------------------------------------
     # GIF
     # ------------------------------------------------------------------
     def _load_gif(self, preferred=None):
-        """Nap GIF theo thu tu uu tien va luon co GIF de hien thi.
-
-        Uu tien 1: GIF cua trang thai hien tai trong nhan vat dang dung.
-        Uu tien 2: GIF da chon, neu con hop le.
-        Uu tien 3: GIF hop le khac trong thu vien.
-        Uu tien 4: GIF mac dinh di kem repo.
-        """
-        cfg = self.config
-        # Luon don thu vien GIF truoc, du sau do di theo nhanh nao.
-        self._prune_gif_list()
-
-        # Uu tien 1: animation cua trang thai hien tai trong pet pack.
-        if self.pack is not None and preferred is None:
-            state_path = self.pack.animation_path(self.state)
-            if state_path is not None:
-                return self._apply_movie(state_path)
-
-        wanted = preferred if preferred is not None else cfg.get("gif_path")
-
-        resolved, stored = gif_library.pick_working_gif(
-            wanted, cfg.get("gif_list"), BASE_DIR
-        )
-        if resolved is None:
-            # Thu cuoi: nhan vat dang dung co GIF nao khac khong.
-            if self.pack is not None:
-                fallback = self.pack.animation_path(self.state)
-                if fallback is not None:
-                    return self._apply_movie(fallback)
-            self._show_missing_gif_message()
-            return False
-
-        if stored != wanted:
-            print(f"GIF đã chọn không dùng được, chuyển sang: {resolved}")
-
-        stored_list = gif_library.normalize_path(resolved, BASE_DIR)
-        if stored_list not in cfg.data["gif_list"]:
-            cfg.data["gif_list"].append(stored_list)
-        cfg.data["gif_path"] = gif_library.normalize_path(resolved, BASE_DIR)
-
-        self._apply_movie(resolved)
-        return True
+        """Nap GIF theo thu tu uu tien. Xem ``gif_player.load_gif``."""
+        return gif_player.load_gif(self, preferred)
 
     def _prune_gif_list(self):
-        """Loai khoi thu vien nhung entry tro toi file da mat hoac hong.
-
-        Nho vay vong doi GIF 10 giay khong bao gio chon trung file hong.
-        """
-        cfg = self.config
-        cleaned = gif_library.existing_entries(cfg.get("gif_list"), BASE_DIR)
-        cfg.data["gif_list"] = cleaned
-        # Giai phong QMovie cua file da bi xoa/khoi thu vien.
-        if hasattr(self, "_movie_cache"):
-            self._prune_movie_cache()
-        return cleaned
+        """Don entry GIF da mat khoi thu vien."""
+        return gif_player.prune_gif_list(self)
 
     def set_state(self, state):
-        """Chuyen trang thai va doi animation tuong ung.
+        """Yeu cau may trang thai chuyen sang ``state``.
 
-        Neu nhan vat khong co GIF cho trang thai nay, ``animation_path`` tu
-        dong tra ve fallback (mac dinh idle.gif), nen khong can xu ly rieng.
+        Moi quy tac uu tien (dang keo, dang roi, che do tap trung) do may
+        trang thai quyet dinh; o day chi chuyen yeu cau di. Neu bi tu choi thi
+        ``machine.last_rejection`` ghi ly do.
+
+        Khong dung lai cua so hay vi tri: ``_on_state_changed`` chi thay movie.
         """
-        if state == self.state:
-            return False
-        previous = self.state
-        self.state = state
-
-        if self.pack is None:
-            return False
-
-        path = self.pack.animation_path(state)
-        if path is None:
-            self.state = previous
-            return False
-        # Khong dung lai cua so hay vi tri: chi thay movie.
-        self._apply_movie(path)
-        return True
+        return self.machine.request(state, reason="yeu cau tu ben ngoai")
 
     def _movie_for(self, resolved_path):
-        """Lay QMovie cua mot duong dan, tao moi chi lan dau tien.
-
-        QMovie khong giai phong het tai nguyen C++ khi bi huy, nen tao/huy lien
-        tuc lam RSS phinh khoang 1.3 MB moi lan: doi GIF 600 lan la mat ~1.5 GB.
-        Vi vay giu cache theo duong dan va tai su dung lai.
-        """
-        movie = self._movie_cache.get(resolved_path)
-        if movie is not None:
-            return movie
-        movie = QMovie(resolved_path)
-        # GIF hong: khong cache de lan sau con thu lai duoc sau khi sua file.
-        if not movie.isValid():
-            return None
-        self._movie_cache[resolved_path] = movie
-        return movie
+        """Lay QMovie tu cache. Xem ``gif_player.movie_for``."""
+        return gif_player.movie_for(self, resolved_path)
 
     def _prune_movie_cache(self):
-        """Bo cache cua GIF da bi xoa hoac hong, giai phong bo nho."""
-        dead = [p for p in self._movie_cache if not gif_library.is_valid_gif(p)]
-        for path in dead:
-            movie = self._movie_cache.pop(path)
-            if movie is self.movie:
-                # Con dang hien thi thi de QLabel nha ra truoc da.
-                if self.label is not None:
-                    self.label.setMovie(None)
-                self.movie = None
-            movie.stop()
-            movie.deleteLater()
+        """Giai phong QMovie cua GIF da bi xoa."""
+        gif_player.prune_movie_cache(self)
 
     def _apply_movie(self, resolved_path):
         """Thay animation ma khong dung lai cua so hay vi tri."""
-        movie = self._movie_for(resolved_path)
-        if movie is None:
-            return False
-
-        old_movie = self.movie
-        if old_movie is movie:
-            # Cung mot GIF: chi can dam bao dang chay, khong dung toi kich thuoc.
-            if not self.config.get("animation_paused") and movie.state() != QMovie.Running:
-                movie.start()
-            return True
-
-        if self.label is None:
-            self.label = QLabel(self)
-            self.label.setAttribute(Qt.WA_TranslucentBackground)
-            self.label.setStyleSheet("border: none;")
-
-        self.movie = movie
-        self._current_resolved_path = resolved_path
-        self.label.setMovie(movie)
-
-        # Giu ti le: tinh kich thuoc tu khung hinh goc doc tu file.
-        self._refit_to_current_movie(resolved_path)
-
-        # Dat lai trang thai pause cua movie moi.
-        if self.config.get("animation_paused"):
-            movie.setPaused(True)
-        else:
-            movie.start()
-
-        # Movie cu van nam trong cache de tai su dung: chi tam dung.
-        if old_movie is not None and old_movie is not movie:
-            old_movie.stop()
-
-        if self.tray is not None:
-            self.tray.setIcon(self._tray_icon())
-        return True
+        return gif_player.apply_movie(self, resolved_path)
 
     def original_size(self, resolved_path=None):
-        """Kich thuoc khung hinh goc cua GIF hien tai.
-
-        Doc tu file qua QImageReader, khong qua QMovie, vi QMovie tra ve kich
-        thuoc da scale sau khi setScaledSize.
-        """
-        if resolved_path is None:
-            resolved_path = self._current_resolved_path
-        dimensions = gif_library.gif_dimensions(resolved_path)
-        if dimensions is not None:
-            return dimensions
-        if self.movie is not None:
-            size = self.movie.currentPixmap().size()
-            if size.width() > 0 and size.height() > 0:
-                return size.width(), size.height()
-        return 1, 1
+        """Kich thuoc khung hinh goc. Xem ``gif_player.original_size``."""
+        return gif_player.original_size(self, resolved_path)
 
     def _refit_to_current_movie(self, resolved_path=None):
-        """Ap dung kich thuoc da luu, giu ti le cua GIF hien tai."""
-        cfg = self.config
-        original_width, original_height = self.original_size(resolved_path)
-        lock_width = bool(cfg.get("width_locked", True))
-        target = cfg.get("gif_width") if lock_width else cfg.get("gif_height")
-        width, height = gif_library.scaled_size(
-            original_width, original_height, target, lock_width
-        )
-        self._apply_size(width, height, persist=False)
+        """Ap kich thuoc da luu, giu ti le GIF hien tai."""
+        gif_player.refit_to_current_movie(self, resolved_path)
 
     def _apply_size(self, width, height, persist=True):
-        if self.movie is not None:
-            self.movie.setScaledSize(QSize(width, height))
-        if self.label is not None:
-            self.label.resize(width, height)
-            self.label.move(0, 0)
-        self.resize(width, height)
-        if persist:
-            self.config.data["gif_width"] = width
-            self.config.data["gif_height"] = height
-            self.config.save()
+        """Dat kich thuoc cua so va movie."""
+        gif_player.apply_size(self, width, height, persist)
 
     # ------------------------------------------------------------------
     # Vi tri
@@ -980,116 +677,30 @@ class PetWindow(QLabel):
         )
 
     def toggle_click_through(self):
-        enabled = not bool(self.config.get("click_through"))
-        self._apply_click_through(enabled)
+        window_skin.toggle_click_through(self)
 
     def _apply_click_through(self, enabled, persist=True):
-        """Bat/tat click xuyen qua pet.
-
-        WA_TransparentForMouseEvents giu cho Qt khong nhan su kien chuot, va
-        mask rong lam cho cua so khong nhan input o tang cua so (X11/Wayland).
-        Khi bat, menu khay va phim tat van hoat dong binh thuong.
-        """
-        enabled = bool(enabled)
-        self.config.data["click_through"] = enabled
-        self.setAttribute(Qt.WA_TransparentForMouseEvents, enabled)
-        if enabled:
-            self.setMask(QRegion())
-        else:
-            self.clearMask()
-        if persist:
-            self.config.save()
-        if enabled:
-            print(
-                "Đã bật click xuyên. Dùng khay hệ thống hoặc Ctrl+Alt+H để hiện/ẩn, "
-                "Ctrl+Alt+Q để thoát."
-            )
+        """Bat/tat click xuyen qua pet. Xem ``window_skin.apply_click_through``."""
+        window_skin.apply_click_through(self, enabled, persist)
 
     def toggle_hide_on_fullscreen(self):
-        self.toggle_fullscreen_watch(not bool(self.config.get("hide_on_fullscreen")))
+        window_skin.toggle_hide_on_fullscreen(self)
 
     def toggle_fullscreen_watch(self, enabled):
-        enabled = bool(enabled)
-        self.config.data["hide_on_fullscreen"] = enabled
-        if enabled:
-            self.fullscreen_timer.start(1000)
-            self._check_fullscreen()
-        else:
-            self.fullscreen_timer.stop()
-            self._restore_after_fullscreen()
-        self.config.save()
+        window_skin.toggle_fullscreen_watch(self, enabled)
 
     def _restore_after_fullscreen(self):
-        if not self._hidden_for_fullscreen:
-            return
-        self._hidden_for_fullscreen = False
-        if self.config.get("visible"):
-            self.show()
-            if not self.config.get("animation_paused") and self.movie is not None:
-                self.movie.setPaused(False)
+        window_skin.restore_after_fullscreen(self)
 
     def _check_fullscreen(self):
-        """An pet khi co ung dung khac dang chiem toan man hinh.
-
-        Uu tien tin hieu tu window manager qua X11; neu khong lay duoc thi
-        so sanh vung lam viec voi toan bo man hinh lam uoc luong.
-        """
-        if not self.config.get("hide_on_fullscreen"):
-            return
-        fullscreen = self._another_window_is_fullscreen()
-        if fullscreen and not self._hidden_for_fullscreen:
-            self._hidden_for_fullscreen = True
-            super().hide()
-            if self.movie is not None:
-                self.movie.setPaused(True)
-            print("Có ứng dụng toàn màn hình: tạm ẩn pet.")
-        elif not fullscreen:
-            self._restore_after_fullscreen()
+        """An pet khi co ung dung toan man hinh. Xem ``window_skin``."""
+        window_skin.check_fullscreen(self)
 
     def _another_window_is_fullscreen(self):
-        """Tra ve True neu man hinh chinh dang bi cua so khac phu kin.
-
-        Tren X11 doc thuoc tinh _NET_ACTIVE_WINDOW roi kiem tra _NET_WM_STATE
-        co _NET_WM_STATE_FULLSCREEN. Neu khong ho tro, tra ve False de tranh
-        an pet nham.
-        """
-        if os.name == "nt" or not os.environ.get("DISPLAY"):
-            return False
-        try:
-            return self._x11_fullscreen_active()
-        except Exception:
-            return False
+        return window_skin.another_window_is_fullscreen(self)
 
     def _x11_fullscreen_active(self):
-        import subprocess
-
-        def xprop(args):
-            result = subprocess.run(
-                ["xprop"] + args,
-                capture_output=True,
-                text=True,
-                timeout=2,
-            )
-            return result.stdout if result.returncode == 0 else ""
-
-        root = xprop(["-root", "_NET_ACTIVE_WINDOW"])
-        if "window id" not in root:
-            return False
-        window_id = root.split("window id")[-1].strip().split()[0]
-        if not window_id or window_id == "0x0":
-            return False
-
-        # Cua so cua chinh pet khong tinh la fullscreen.
-        handle = self.windowHandle()
-        if handle is not None:
-            try:
-                if hex(int(handle.winId())) == hex(int(window_id, 16)):
-                    return False
-            except (ValueError, TypeError):
-                pass
-
-        state = xprop(["-id", window_id, "_NET_WM_STATE"])
-        return "_NET_WM_STATE_FULLSCREEN" in state
+        return window_skin.x11_fullscreen_active(self)
 
     # ------------------------------------------------------------------
     # Nhac tap trung / nghi (Pomodoro)
@@ -1113,8 +724,8 @@ class PetWindow(QLabel):
             return
         if self.config.get("pomodoro_bubble", True):
             self._show_bubble(message, duration_ms)
-        if self.config.get("pomodoro_notify", True) and self.tray is not None:
-            self.tray.showMessage("GIF Pet", message, QSystemTrayIcon.Information, 5000)
+        if self.config.get("pomodoro_notify", True):
+            tray_menu.notify(self, message)
         print(f"[nói] {message}")
 
     def _show_bubble(self, message, duration_ms):
@@ -1248,89 +859,24 @@ class PetWindow(QLabel):
         self._handle_brain_result(result)
 
     def _handle_brain_result(self, result):
-        """Hien ket qua tu Brain, va hoi xac nhan neu la hanh dong co tac dung phu.
-
-        Moi hanh dong da duoc ``actions`` kiem tra truoc khi toi day.
-        """
-        if not result.ok:
-            self.announce(self._error_message(result.error), duration_ms=5000)
-            return
-
-        if result.text:
-            self.announce(result.text, duration_ms=6000)
-
-        if result.action is None:
-            return
-
-        if result.needs_confirmation:
-            self._ask_confirmation(result.action, result.params)
-        else:
-            self._run_action(result.action, result.params)
+        """Hien ket qua AI, hoi xac nhan neu can. Xem ``pet_actions``."""
+        pet_actions.handle_brain_result(self, result)
 
     def _error_message(self, code):
-        return {
-            "disabled": "Trợ lý AI đang tắt.",
-            "no_key": "Chưa có API key. Vào Cài đặt để nhập.",
-            "exhausted": "Hết lượt dùng AI hôm nay.",
-            "rate_limited": "Chậm thôi, vừa hỏi xong mà.",
-            "disabled_model": "Đang tắt gọi model.",
-            "auth": "API key sai hoặc đã hết hạn.",
-            "rate_limit": "Nhà cung cấp đang giới hạn tốc độ, thử lại sau.",
-            "network": "Không kết nối được mạng.",
-            "server": "Nhà cung cấp đang lỗi, thử lại sau.",
-            "rejected_action": "Pet định làm gì đó không được phép, đã bỏ qua.",
-            "bad_reply": "Pet trả lời không rõ, đã bỏ qua.",
-            "empty_reply": "Pet không trả lời được.",
-        }.get(code, "Có lỗi khi gọi AI.")
+        """Cau bao loi theo ma. Xem ``pet_actions.error_message``."""
+        return pet_actions.error_message(code)
 
     def _ask_confirmation(self, action, params):
-        """Lop 3: hoi nguoi dung truoc khi lam viec co tac dung phu."""
-        question = ai_actions.describe(action, params)
-        answer = QMessageBox.question(
-            self,
-            "Pet muốn làm việc này",
-            f"{question}\n\nCho phép?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if answer == QMessageBox.Yes:
-            self._run_action(action, params)
-        else:
-            self.announce("Đã bỏ qua.", duration_ms=3000)
+        """Hoi nguoi dung. Xem ``pet_actions.ask_confirmation``."""
+        pet_actions.ask_confirmation(self, action, params)
 
     def _run_action(self, name, params):
-        """Thuc hien hanh dong da qua kiem tra.
-
-        Khong co nhanh nao chay shell, doc file hay ghi file: chi cac hanh
-        dong liet ke trong ``ai_actions.ALLOWED_ACTIONS``.
-        """
-        if name == "say":
-            self.announce(params.get("text", ""), duration_ms=6000)
-        elif name == "react":
-            self.set_state(state_module.REACT)
-        elif name == "set_state":
-            self.set_state(params.get("state", state_module.IDLE))
-        elif name == "remind":
-            minutes = int(params.get("in_minutes", 1))
-            text = params.get("text", "")
-            QTimer.singleShot(minutes * 60 * 1000, lambda: self.announce(text, 8000))
-            self.announce(f"Nhắc sau {minutes} phút nhé.", duration_ms=3000)
-        elif name == "open_url":
-            self._open_url(params.get("url", ""))
+        """Thuc hien hanh dong. Xem ``pet_actions.run_action``."""
+        pet_actions.run_action(self, name, params)
 
     def _open_url(self, url):
-        """Mo URL bang trinh duyet mac dinh. URL da duoc ``actions`` kiem tra."""
-        from PyQt5.QtCore import QUrl
-        from PyQt5.QtGui import QDesktopServices
-
-        if not ai_actions.is_allowed("open_url"):
-            return
-        try:
-            ai_actions.validate("open_url", {"url": url})
-        except ai_actions.ActionError:
-            self.announce("Địa chỉ này không được phép mở.", duration_ms=4000)
-            return
-        QDesktopServices.openUrl(QUrl(url))
+        """Mo URL. Xem ``pet_actions.open_url``."""
+        pet_actions.open_url(self, url)
 
     def open_settings(self):
         dialog = SettingsDialog(self.config, self)
@@ -1384,21 +930,9 @@ class PetWindow(QLabel):
         self._sync_focus_with_pomodoro()
 
     def _apply_pin(self, pinned, persist=True):
-        flags = self.windowFlags()
-        if pinned:
-            flags |= Qt.WindowStaysOnTopHint
-        else:
-            flags &= ~Qt.WindowStaysOnTopHint
-        self.setWindowFlags(flags)
-        self.config.data["pin_to_top"] = bool(pinned)
-        if persist:
-            self.config.save()
-        if self.config.get("visible"):
-            self.show()
+        """Bat/tat luon noi tren cung. Xem ``window_skin.apply_pin``."""
+        window_skin.apply_pin(self, pinned, persist)
 
-    # ------------------------------------------------------------------
-    # GIF switching
-    # ------------------------------------------------------------------
     def auto_switch_gif(self):
         """Doi sang GIF hop le khac trong thu vien."""
         if self.config.get("animation_paused"):
@@ -1423,8 +957,7 @@ class PetWindow(QLabel):
             "vào thư mục ứng dụng."
         )
         print(text)
-        if self.tray is not None:
-            self.tray.showMessage("GIF Pet", text, QSystemTrayIcon.Warning, 5000)
+        tray_menu.notify(self, text, warning=True)
 
     # ------------------------------------------------------------------
     # Thoat
@@ -1438,21 +971,8 @@ class PetWindow(QLabel):
         self.app.quit()
 
     def _release_movies(self):
-        """Dung va nha het QMovie. Goi truoc khi cua so bi huy.
-
-        Neu de Qt huy cua so truoc roi moi huy QMovie (hoac nguoc lai), QMovie
-        con dang chay se goi vao QLabel da chet -> segfault. Phai dung han va
-        go tham chieu tu QLabel truoc.
-        """
-        if self.label is not None:
-            self.label.setMovie(None)
-        for movie in list(self._movie_cache.values()):
-            movie.stop()
-            movie.deleteLater()
-        self._movie_cache.clear()
-        if self.movie is not None:
-            self.movie.stop()
-        self.movie = None
+        """Dung va nha het QMovie truoc khi cua so bi huy."""
+        gif_player.release_movies(self)
 
     def closeEvent(self, event):
         # Tat het timer truoc khi nha tai nguyen: tranh tick vao luc dang don.

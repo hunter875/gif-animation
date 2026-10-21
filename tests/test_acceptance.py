@@ -5,7 +5,6 @@ Chay: QT_QPA_PLATFORM=offscreen .venv/bin/python tests/acceptance_check.py
 
 import json
 import os
-import shutil
 import sys
 import tempfile
 

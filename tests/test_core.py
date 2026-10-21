@@ -539,7 +539,6 @@ class TestNoPersonalPathsInRepo(unittest.TestCase):
         minh hoa (vd cach nhan dien duong dan kieu Windows), khong phai
         duong dan cua may nguoi dung.
         """
-        import io
         import tokenize
 
         markers = ("D:/", "C:/", "C:\\", "/home/", "/Users/")
