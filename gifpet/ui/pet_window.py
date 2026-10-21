@@ -28,6 +28,7 @@ from PyQt5.QtWidgets import (
     QApplication,
     QDialog,
     QDialogButtonBox,
+    QInputDialog,
     QLabel,
     QMenu,
     QMessageBox,
@@ -43,6 +44,9 @@ from gifpet.core import gif_library, paths, pet_pack
 from gifpet.core import pomodoro as pomodoro_module
 from gifpet.core import screen_utils
 from gifpet.core import state as state_module
+from gifpet.ai import actions as ai_actions
+from gifpet.ai import secrets as ai_secrets
+from gifpet.ai.brain import Brain
 from gifpet.core.config import Config
 from gifpet.ui.dialogs import ResizeDialog, SettingsDialog
 from gifpet.ui.gif_library_dialog import GifLibraryDialog
@@ -86,6 +90,11 @@ class PetWindow(QLabel):
         self._current_resolved_path = None
         self.pack = None
         self.packs = []
+
+        # Bo nao AI (Giai doan 4). Khong goi mang khi chua bat ai_enabled.
+        self.brain = Brain(self.config)
+        # Cau hoi dang cho nguoi dung xac nhan (hanh dong co tac dung phu).
+        self._pending_action = None
 
         # May trang thai va bo dieu phoi hanh vi (Giai doan 3).
         self.machine = state_module.StateMachine(
@@ -208,6 +217,9 @@ class PetWindow(QLabel):
 
         self.shortcut_visible = QShortcut(QKeySequence("Ctrl+Alt+H"), self)
         self.shortcut_visible.activated.connect(self.toggle_visible)
+
+        self.shortcut_chat = QShortcut(QKeySequence("Ctrl+Alt+A"), self)
+        self.shortcut_chat.activated.connect(self.open_chat)
 
         # Thoat phai luon dung duoc: neu bat click xuyen, chuot khong bam duoc pet.
         self.shortcut_quit = QShortcut(QKeySequence("Ctrl+Alt+Q"), self)
@@ -484,6 +496,9 @@ class PetWindow(QLabel):
         )
         self.action_hide_fullscreen.triggered.connect(self.toggle_hide_on_fullscreen)
 
+        self.action_chat = QAction("Hỏi pet…", self)
+        self.action_chat.triggered.connect(self.open_chat)
+
         self.action_library = QAction("Thư viện GIF…", self)
         self.action_library.triggered.connect(self.open_library)
 
@@ -510,6 +525,7 @@ class PetWindow(QLabel):
         self.menu.addAction(self.action_pomodoro)
         self.menu.addMenu(self.pomodoro_menu)
         self.menu.addSeparator()
+        self.menu.addAction(self.action_chat)
         self.menu.addAction(self.action_click_through)
         self.menu.addAction(self.action_hide_fullscreen)
         self.menu.addAction(self.action_pin)
@@ -1211,11 +1227,117 @@ class PetWindow(QLabel):
             self.config.data["width_locked"] = lock_width
             self._apply_size(width, height, persist=True)
 
+    # ------------------------------------------------------------------
+    # Tro ly AI (Giai doan 4)
+    # ------------------------------------------------------------------
+    def open_chat(self):
+        """Hoi pet mot cau. Chi goi model khi nguoi dung chu dong mo."""
+        if not self.config.get("ai_enabled"):
+            self.announce(
+                "Trợ lý AI đang tắt. Bật trong Cài đặt nếu muốn dùng.",
+                duration_ms=5000,
+            )
+            return
+
+        text, ok = QInputDialog.getText(self, "Hỏi pet", "Bạn muốn nói gì?")
+        if not ok or not text.strip():
+            return
+
+        self.announce("Đang nghĩ…", duration_ms=1500)
+        result = self.brain.ask("chat", text.strip())
+        self._handle_brain_result(result)
+
+    def _handle_brain_result(self, result):
+        """Hien ket qua tu Brain, va hoi xac nhan neu la hanh dong co tac dung phu.
+
+        Moi hanh dong da duoc ``actions`` kiem tra truoc khi toi day.
+        """
+        if not result.ok:
+            self.announce(self._error_message(result.error), duration_ms=5000)
+            return
+
+        if result.text:
+            self.announce(result.text, duration_ms=6000)
+
+        if result.action is None:
+            return
+
+        if result.needs_confirmation:
+            self._ask_confirmation(result.action, result.params)
+        else:
+            self._run_action(result.action, result.params)
+
+    def _error_message(self, code):
+        return {
+            "disabled": "Trợ lý AI đang tắt.",
+            "no_key": "Chưa có API key. Vào Cài đặt để nhập.",
+            "exhausted": "Hết lượt dùng AI hôm nay.",
+            "rate_limited": "Chậm thôi, vừa hỏi xong mà.",
+            "disabled_model": "Đang tắt gọi model.",
+            "auth": "API key sai hoặc đã hết hạn.",
+            "rate_limit": "Nhà cung cấp đang giới hạn tốc độ, thử lại sau.",
+            "network": "Không kết nối được mạng.",
+            "server": "Nhà cung cấp đang lỗi, thử lại sau.",
+            "rejected_action": "Pet định làm gì đó không được phép, đã bỏ qua.",
+            "bad_reply": "Pet trả lời không rõ, đã bỏ qua.",
+            "empty_reply": "Pet không trả lời được.",
+        }.get(code, "Có lỗi khi gọi AI.")
+
+    def _ask_confirmation(self, action, params):
+        """Lop 3: hoi nguoi dung truoc khi lam viec co tac dung phu."""
+        question = ai_actions.describe(action, params)
+        answer = QMessageBox.question(
+            self,
+            "Pet muốn làm việc này",
+            f"{question}\n\nCho phép?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer == QMessageBox.Yes:
+            self._run_action(action, params)
+        else:
+            self.announce("Đã bỏ qua.", duration_ms=3000)
+
+    def _run_action(self, name, params):
+        """Thuc hien hanh dong da qua kiem tra.
+
+        Khong co nhanh nao chay shell, doc file hay ghi file: chi cac hanh
+        dong liet ke trong ``ai_actions.ALLOWED_ACTIONS``.
+        """
+        if name == "say":
+            self.announce(params.get("text", ""), duration_ms=6000)
+        elif name == "react":
+            self.set_state(state_module.REACT)
+        elif name == "set_state":
+            self.set_state(params.get("state", state_module.IDLE))
+        elif name == "remind":
+            minutes = int(params.get("in_minutes", 1))
+            text = params.get("text", "")
+            QTimer.singleShot(minutes * 60 * 1000, lambda: self.announce(text, 8000))
+            self.announce(f"Nhắc sau {minutes} phút nhé.", duration_ms=3000)
+        elif name == "open_url":
+            self._open_url(params.get("url", ""))
+
+    def _open_url(self, url):
+        """Mo URL bang trinh duyet mac dinh. URL da duoc ``actions`` kiem tra."""
+        from PyQt5.QtCore import QUrl
+        from PyQt5.QtGui import QDesktopServices
+
+        if not ai_actions.is_allowed("open_url"):
+            return
+        try:
+            ai_actions.validate("open_url", {"url": url})
+        except ai_actions.ActionError:
+            self.announce("Địa chỉ này không được phép mở.", duration_ms=4000)
+            return
+        QDesktopServices.openUrl(QUrl(url))
+
     def open_settings(self):
         dialog = SettingsDialog(self.config, self)
         if dialog.exec_() != QDialog.Accepted:
             return
         values = dialog.values()
+        pending_key = dialog.pending_key()
         click_through_changed = values["click_through"] != bool(
             self.config.get("click_through")
         )
@@ -1227,6 +1349,14 @@ class PetWindow(QLabel):
 
         self.config.data.update(values)
         self.config.save()
+
+        # API key luu o file rieng, KHONG ghi vao config.json.
+        if pending_key is not None:
+            try:
+                ai_secrets.set_api_key(pending_key)
+                self.brain._api_key = None  # doc lai tu file hoac env
+            except OSError as exc:
+                print(f"Canh bao: khong luu duoc API key ({exc}).")
 
         if click_through_changed:
             self._apply_click_through(values["click_through"], persist=False)

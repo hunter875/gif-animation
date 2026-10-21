@@ -394,3 +394,64 @@ Ghi rõ để sau này không ai tự ý thêm vào:
 
 Nếu một tính năng cần một trong những quyền trên, nó phải là **tool riêng**,
 không phải thêm vào một tiến trình GUI chạy nền.
+
+---
+
+## 8. Trạng thái triển khai (Giai đoạn 4)
+
+Phần trên là thiết kế. Mục này ghi lại **những gì đã làm thật** và những hạn
+chế còn lại, để không ai đọc tài liệu rồi tưởng nhiều hơn thực tế.
+
+### Đã triển khai
+
+| Hạng mục | File | Ghi chú |
+|---|---|---|
+| Whitelist hành động | `gifpet/ai/actions.py` | 5 hành động; kiểm tên/kiểu/miền giá trị |
+| Chặn URL nguy hiểm | `gifpet/ai/actions.py` | Chỉ `https`; chặn localhost, IP nội bộ, metadata cloud |
+| Tách dữ liệu khỏi chỉ dẫn | `gifpet/ai/brain.py` | JSON có `type`; không nối vào system prompt |
+| Xác nhận hành động | `gifpet/ui/pet_window.py` | `QMessageBox`, mặc định là "Không" |
+| Bộ nhớ chỉ ghi chú người dùng | `gifpet/ai/memory.py` | `kind` khác `user_note` bị từ chối |
+| API key tách riêng | `gifpet/ai/secrets.py` | Env hoặc `secrets.json` 0600, thư mục 0700 |
+| Quota | `gifpet/ai/quota.py` | Đếm trước khi gửi, reset theo ngày, chống đồng hồ lùi |
+| Rate limit | `gifpet/ai/quota.py` | 1.5 giây giữa hai lượt |
+| Không gọi model cho sự kiện pet | `gifpet/ai/brain.py` | `MODEL_EVENT_KINDS` chỉ có chat/clipboard |
+| Provider có timeout | `gifpet/ai/provider.py` | 20 giây, key trong header |
+| Test | `tests/test_ai.py` | 64 test, không gọi mạng thật |
+
+### Hạn chế đã biết
+
+Ghi rõ để không hiểu nhầm là đã hoàn hảo:
+
+1. **`remind` không sống qua lần tắt app.** Dùng `QTimer.singleShot`, nên
+   lời nhắc đã hẹn sẽ mất nếu đóng app. Muốn bền thì phải lưu vào file và
+   kiểm lại lúc khởi động — chưa làm.
+
+2. **Chưa có gom sự kiện (batching).** `ai_proactive` cho phép pet tự nói,
+   nhưng chưa có cơ chế gộp sự kiện trong 60 giây như thiết kế mục 4.2. Hiện
+   tại chỉ gọi khi người dùng mở "Hỏi pet".
+
+3. **Chưa cắt `in_minutes` theo ngày làm việc.** Hẹn tối đa 24 giờ, nhưng nếu
+   app tắt thì mất (xem mục 1).
+
+4. **Chưa kiểm tra chéo response của provider.** Tin vào đúng cấu trúc JSON
+   của Groq/Gemini; nếu họ đổi schema, `ProviderError("bad_response")` và pet
+   báo lỗi, không crash — nhưng không tự phát hiện được.
+
+5. **Chưa có xác thực chứng chỉ tuỳ chỉnh.** Dùng CA mặc định của hệ thống.
+   Môi trường có proxy chèn chứng chỉ sẽ không kết nối được.
+
+6. **`open_url` mở bằng trình duyệt mặc định** qua `QDesktopServices`. Nếu hệ
+   thống đã bị chiếm quyền, trình duyệt mặc định có thể là thứ khác — ngoài
+   phạm vi app kiểm soát được.
+
+7. **Chưa có giới hạn theo chi phí tiền tệ**, chỉ giới hạn theo số lượt và độ
+   dài. Nếu nhà cung cấp đổi giá, trần tiền vẫn chưa được tính.
+
+### Kiểm chứng
+
+```bash
+./run.sh --test        # có test_ai.py (64 test)
+```
+
+Không gọi mạng thật: mọi test dùng `FakeProvider`. Muốn thử thật thì tự nhập
+key và bật `ai_enabled` trong Cài đặt.

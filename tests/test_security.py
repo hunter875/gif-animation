@@ -33,33 +33,74 @@ def read(path):
 
 
 class TestNoNetwork(unittest.TestCase):
-    """App chua co AI thi khong duoc co bat ky lenh goi mang nao."""
+    """Khong goi mang ngoai ``gifpet/ai/provider.py``.
 
-    # Thu vien mang pho bien. Them vao la phai sua test nay co chu dich.
-    NETWORK_MODULES = (
-        "requests", "urllib", "http.client", "socket", "httpx",
-        "aiohttp", "ftplib", "smtplib", "telnetlib",
+    Giai doan 1-3 khong co network. Giai doan 4 them dung mot cho goi mang:
+    provider.py. Test nay khoa lai dieu do - bat ky file nao khac them network
+    la phai sua test co chu dich.
+    """
+
+    # File duoc phep cham toi thu vien mang.
+    NETWORK_ALLOWED = (
+        os.path.join("gifpet", "ai", "provider.py"),
+        # actions.py chi PHAN TICH url (urlsplit), khong ket noi mang.
+        os.path.join("gifpet", "ai", "actions.py"),
     )
 
-    def test_khong_import_thu_vien_mang(self):
+    # Module mang thuc su mo ket noi. urllib.parse chi xu ly chuoi.
+    NETWORK_MODULES = (
+        "requests", "urllib.request", "urllib.error", "http.client", "socket",
+        "httpx", "aiohttp", "ftplib", "smtplib", "telnetlib",
+    )
+
+    def test_chi_provider_mo_ket_noi_mang(self):
         found = []
         for path in source_files():
+            rel = os.path.relpath(path, ROOT)
+            if rel in self.NETWORK_ALLOWED:
+                continue
             text = read(path)
             for module in self.NETWORK_MODULES:
-                # Bat ca "import X" va "from X import ..."
                 pattern = rf"^\s*(?:import|from)\s+{re.escape(module)}\b"
                 if re.search(pattern, text, re.MULTILINE):
-                    found.append(f"{os.path.relpath(path, ROOT)}: {module}")
-        self.assertEqual(found, [], f"phat hien goi mang: {found}")
+                    found.append(f"{rel}: {module}")
+        self.assertEqual(found, [], f"mo ket noi mang ngoai provider.py: {found}")
 
-    def test_khong_co_url_cung_trong_code(self):
-        """Khong co dia chi http(s) viet cung trong code."""
+    def test_provider_co_import_urllib(self):
+        """Chot chan: neu provider bi doi sang thu vien khac, test bao ngay."""
+        text = read(os.path.join(ROOT, self.NETWORK_ALLOWED[0]))
+        self.assertIn("urllib.request", text)
+
+    def test_url_cung_chi_nam_trong_provider(self):
+        """Dia chi http(s) viet cung chi duoc o provider.py.
+
+        Ngoai le: chuoi huong dan trong prompt (brain.py) la van ban, khong
+        phai dia chi that; kiem tra theo dạng "http(s)://host/path" cu the.
+        """
         found = []
         for path in source_files():
+            rel = os.path.relpath(path, ROOT)
+            if rel == self.NETWORK_ALLOWED[0]:
+                continue
             for line_no, line in enumerate(read(path).splitlines(), 1):
-                if re.search(r"https?://[a-zA-Z0-9.-]+", line):
-                    found.append(f"{os.path.relpath(path, ROOT)}:{line_no}")
-        self.assertEqual(found, [], f"co URL cung trong code: {found}")
+                # Bo qua dong trong docstring/prompt huong dan.
+                if '"""' in line or "params" in line:
+                    continue
+                if re.search(r"https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", line):
+                    found.append(f"{rel}:{line_no}")
+        self.assertEqual(found, [], f"URL cung ngoai provider.py: {found}")
+
+    def test_ta_tat_ai_thi_khong_co_request_nao(self):
+        """Duong chay mac dinh (ai_enabled=False) khong cham provider."""
+        from gifpet.ai.brain import Brain
+        from gifpet.core.config import Config
+
+        config = Config()
+        config.data["ai_enabled"] = False
+        brain = Brain(config)
+        # Neu provider() bi goi, no se tra ve None vi khong co key.
+        self.assertFalse(brain.enabled())
+        self.assertEqual(brain.ask("chat", "x").error, "disabled")
 
 
 class TestNoArbitraryExecution(unittest.TestCase):

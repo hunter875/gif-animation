@@ -30,11 +30,15 @@ gif-animation/
 │   ├── assets/                 # tài nguyên tĩnh
 │   │   └── app_icon.ico
 │   │
-│   ├── ai/                     # (Giai đoạn 4) — CHƯA TRIỂN KHAI
-│   │   └── __init__.py         # mô tả thiết kế dự kiến
+│   ├── ai/                     # (Giai đoạn 4) trợ lý AI — đã triển khai
+│   │   ├── actions.py          # whitelist hành động + kiểm tra tham số/URL
+│   │   ├── brain.py            # gom sự kiện → gọi model → lọc kết quả
+│   │   ├── provider.py         # Groq / Gemini, nơi DUY NHẤT mở kết nối mạng
+│   │   ├── quota.py            # đếm lượt/ngày, rate limit
+│   │   ├── secrets.py          # API key riêng, quyền 0600
+│   │   └── memory.py           # chỉ ghi chú người dùng gõ tay
 │   │
-│   └── voice/                  # (Giai đoạn 5) — CHƯA TRIỂN KHAI
-│       └── __init__.py         # mô tả thiết kế dự kiến
+│   └── (Giai đoạn 5 giọng nói đã bỏ khỏi phạm vi)
 │
 ├── pets/                       # thư viện nhân vật
 │   └── default/
@@ -49,7 +53,8 @@ gif-animation/
 │   ├── test_pomodoro.py        # 32 test nhắc tập trung / nghỉ
 │   ├── test_speech_bubble.py   # 14 test bong bóng thoại
 │   ├── test_stability.py       # 10 test chống rò rỉ bộ nhớ / chống treo
-│   ├── test_security.py        # 15 test khoá ràng buộc bảo mật
+│   ├── test_security.py        # 17 test khoá ràng buộc bảo mật
+│   ├── test_ai.py              # 64 test trợ lý AI (provider giả)
 │   ├── test_acceptance.py      # 17 tiêu chí nghiệm thu
 │   └── test_phase3_flow.py     # 16 bước vòng đời Giai đoạn 3
 │
@@ -255,39 +260,43 @@ Hai cái bẫy khi build, đã xử lý trong script:
 - `--output-filename` **không được trùng tên thư mục package**. Đặt là `gifpet`
   sẽ lỗi `data file conflicts with executable`; script dùng `gif-pet`.
 
-## Giai đoạn 4 — AI (chưa triển khai)
+## Giai đoạn 4 — AI (đã triển khai)
 
-Dự kiến trong `gifpet/ai/`:
-
-| Module | Vai trò |
-|---|---|
-| `provider.py` | giao diện chung cho các nhà cung cấp (Groq, Gemini, ...) |
-| `actions.py` | danh sách hành động được phép + kiểm tra tên/tham số/tần suất |
-| `memory.py` | bộ nhớ xem và xóa được; chỉ lưu điều người dùng cho phép |
-| `quota.py` | đếm lượt dùng trong ngày, trần lượt/ngày |
-| `brain.py` | gom sự kiện → gọi model → trả về (câu nói, hành động) |
-
-Nguyên tắc bắt buộc:
-
-- Model **chỉ được đề xuất hành động có trong danh sách cho phép**. App kiểm tra
-  tên hành động, tham số và tần suất trước khi thực hiện.
-- Không nhận lệnh tùy ý như chạy shell hay mở file.
-- Không gửi lại toàn bộ lịch sử mỗi lần; chỉ gửi sự kiện đã chọn.
-- Hết quota hoặc mất mạng thì pet vẫn hoạt động local bình thường.
-- Click liên tục được gom thành một sự kiện; pet tự đi, rơi, ngủ **không** gọi model.
-
-## Giai đoạn 5 — Giọng nói (chưa triển khai)
-
-Dự kiến trong `gifpet/voice/`:
+Code trong `gifpet/ai/`:
 
 | Module | Vai trò |
 |---|---|
-| `stt.py` | bấm để nói → chuyển thành chữ |
-| `tts.py` | đọc câu trả lời, có nút tắt tiếng |
-| `talk.py` | điều phối: bấm phím → nói → STT → AI → TTS → animation `talk` |
+| `provider.py` | Groq / Gemini, timeout cứng. **Nơi duy nhất mở kết nối mạng** |
+| `actions.py` | whitelist 5 hành động + kiểm tên/kiểu/miền giá trị/tham số |
+| `brain.py` | nối sự kiện → provider → lọc kết quả; áp đủ 4 lớp phòng thủ |
+| `quota.py` | đếm lượt/ngày, reset theo ngày, chống đồng hồ lùi, rate limit |
+| `secrets.py` | API key ở env hoặc `secrets.json` (0600), tách khỏi config |
+| `memory.py` | chỉ lưu ghi chú người dùng gõ tay; xem/xoá được |
 
-Bắt đầu bằng "bấm để nói", **không** nghe mic liên tục — vì khó quản lý tiếng ồn,
-độ trễ và số lượt sử dụng.
+Luồng một lượt:
+
+```
+người dùng bấm Ctrl+Alt+A
+   → Brain.ask("chat", text)
+       → quota.check_and_use()      # hết lượt / quá nhanh → dừng
+       → build_user_content(...)    # JSON có trường type, không nối vào system prompt
+       → provider.complete(...)     # timeout 20s, key trong header
+       → extract_json(reply)        # không phải JSON → coi là câu nói
+       → actions.validate(name, params)   # <-- CHỐT CHẶN
+   → PetWindow._handle_brain_result(...)
+       → hiện bong bóng thoại
+       → hành động có tác dụng phụ? hỏi QMessageBox, mặc định "Không"
+       → chạy hành động
+```
+
+Ràng buộc đầy đủ và hạn chế đã biết: `docs/SECURITY.md`.
+Test: `tests/test_ai.py` (64 test, dùng provider giả, không gọi mạng thật).
+
+## Giai đoạn 5 — Giọng nói (đã bỏ)
+
+Bỏ khỏi phạm vi theo yêu cầu. Đã xoá `gifpet/voice/` và các biến
+`voice_enabled` / `voice_muted` trong config. Lý do từ chối về bảo mật
+(nghe mic liên tục) ghi ở `docs/SECURITY.md` mục 7.
 
 ## Chạy
 

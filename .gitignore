@@ -10,3 +10,8 @@ build/
 *.build/
 *.dist/
 *.onefile-build/
+
+# Bi mat va bo nho ca nhan (binh thuong nam ngoai repo, giu day de phong)
+secrets.json
+memory.json
+.env

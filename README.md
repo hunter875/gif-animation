@@ -37,10 +37,32 @@ Chạy được trên Linux, Windows và macOS.
 - Lời nhắc hiện trong bong bóng thoại trên đầu pet và/hoặc thông báo khay.
 - Có nút tạm dừng, chạy tiếp, bỏ qua pha, và "Nhắc uống nước ngay".
 
+**Trợ lý AI (tuỳ chọn, mặc định tắt)**
+- Hỏi pet bằng `Ctrl+Alt+A` hoặc menu khay → "Hỏi pet…".
+- Hỗ trợ Groq và Google Gemini. Tự nhập API key trong Cài đặt.
+- Pet chỉ được **đề xuất** hành động trong danh sách cố định:
+  `say`, `react`, `set_state`, `remind`, `open_url`. Hành động khác bị bỏ.
+- Mở URL hoặc hẹn nhắc giờ phải **bạn bấm đồng ý** mới chạy.
+- Chỉ `https` được mở; chặn `file://`, `javascript:`, localhost, IP nội bộ.
+- Giới hạn lượt/ngày (mặc định 50) và tốc độ (1.5 giây giữa hai lượt).
+- Bộ nhớ chỉ chứa điều **bạn tự gõ**, xem và xoá được trong Cài đặt.
+- Hết lượt hoặc mất mạng thì pet vẫn chạy bình thường.
+
+API key lưu **tách riêng** khỏi `config.json`:
+
+```bash
+export GIFPET_API_KEY="..."   # cách 1: biến môi trường, không ghi ra đĩa
+./run.sh
+```
+
+Cách 2: nhập trong Cài đặt → lưu vào `secrets.json` (quyền `0600`,
+thư mục `0700`). Key **không bao giờ** nằm trong `config.json`.
+Chi tiết bảo mật: `docs/SECURITY.md`.
+
 **Khay hệ thống**
 Menu khay gồm: hiện/ẩn pet, tạm dừng animation, tự động đổi GIF, pet tự đi,
 chế độ tập trung, cho pet ngủ ngay, nhắc tập trung/nghỉ (Pomodoro),
-click xuyên qua pet, ẩn khi fullscreen,
+hỏi pet (AI), click xuyên qua pet, ẩn khi fullscreen,
 luôn nổi trên cùng, thư viện GIF, chỉnh kích thước, đưa về giữa màn hình,
 cài đặt và thoát.
 
@@ -61,6 +83,7 @@ Phím tắt luôn hoạt động, kể cả khi đã bật click xuyên qua pet:
 | `Ctrl+Alt+H` | Hiện/ẩn pet |
 | `Ctrl+Alt+P` | Tạm dừng / tiếp tục animation |
 | `Ctrl+Alt+C` | Đưa pet về giữa màn hình |
+| `Ctrl+Alt+A` | Hỏi pet (cần bật AI) |
 | `Ctrl+Alt+Q` | Thoát ứng dụng |
 
 > **Lưu ý về click xuyên:** khi bật, chuột sẽ không bấm được vào pet.
@@ -176,19 +199,20 @@ Cấu trúc:
 | `tests/test_pomodoro.py` | 32 test nhắc tập trung / nghỉ |
 | `tests/test_speech_bubble.py` | 14 test bong bóng thoại |
 | `tests/test_stability.py` | 10 test chống rò rỉ bộ nhớ / chống treo |
-| `tests/test_security.py` | 15 test khoá ràng buộc bảo mật |
+| `tests/test_security.py` | 17 test khoá ràng buộc bảo mật |
+| `tests/test_ai.py` | 64 test cho trợ lý AI (không gọi mạng thật) |
 | `tests/test_acceptance.py` | 17 tiêu chí nghiệm thu |
 | `tests/test_phase3_flow.py` | 16 bước vòng đời Giai đoạn 3 |
 | `tools/make_state_animations.py` | Sinh animation trạng thái còn thiếu |
 | `tools/build_binary.sh` | Đóng gói binary bằng Nuitka |
 | `tools/slim_binary.sh` | Dọn Qt plugin không dùng |
 | `docs/ARCHITECTURE.md` | Kiến trúc và vị trí code từng giai đoạn |
-| `docs/SECURITY.md` | Ràng buộc bảo mật cho Giai đoạn 4 (AI) |
+| `docs/SECURITY.md` | Ràng buộc bảo mật và trạng thái triển khai AI |
 
 Chạy test:
 
 ```bash
-./run.sh --test      # tất cả test đơn vị (83 + 32 + 14 + 10 + 15)
+./run.sh --test      # tất cả test đơn vị (83 + 64 + 32 + 17 + 14 + 10)
 ./run.sh --accept    # 17 tiêu chí nghiệm thu
 ./run.sh --phase3    # 16 bước vòng đời Giai đoạn 3
 # hoặc
