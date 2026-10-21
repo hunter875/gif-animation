@@ -208,9 +208,14 @@ Cấu trúc:
 | `tools/make_state_animations.py` | Sinh animation trạng thái còn thiếu |
 | `tools/build_binary.sh` | Đóng gói binary bằng Nuitka |
 | `tools/slim_binary.sh` | Dọn Qt plugin không dùng |
-| `docs/ARCHITECTURE.md` | Kiến trúc và vị trí code từng giai đoạn |
-| `docs/SECURITY.md` | Ràng buộc bảo mật và trạng thái triển khai AI |
-| `docs/ROADMAP.md` | Việc đã xong, đang làm, chưa làm |
+| [`docs/README.md`](docs/README.md) | **Mục lục tài liệu** — bắt đầu ở đây |
+| `docs/ARCHITECTURE.md` | Code tổ chức thế nào, vì sao |
+| `docs/MODULES.md` | Từng module làm gì, sửa thì ảnh hưởng gì |
+| `docs/SECURITY.md` | Ràng buộc bảo mật (thiết kế) |
+| `docs/ROADMAP.md` | Đã xong / chưa làm / không làm |
+| `docs/TROUBLESHOOTING.md` | Lỗi đã gặp và cách sửa |
+| `docs/BROWSER-AGENT.md` | Thiết kế AI agent dùng trình duyệt (chưa code) |
+| `docs/MEMORY.md` | Thiết kế bộ nhớ dài hạn (chưa code) |
 
 Chạy test:
 
@@ -222,9 +227,9 @@ Chạy test:
 QT_QPA_PLATFORM=offscreen .venv/bin/python tests/test_core.py
 ```
 
-Xem `docs/ARCHITECTURE.md` để biết cấu trúc thư mục đầy đủ và vị trí code
-của từng giai đoạn. Bảo mật (chống prompt injection, API key, quota, chi phí)
-ở `docs/SECURITY.md`.
+Tài liệu có mục lục riêng: [`docs/README.md`](docs/README.md).
+Bảo mật (chống prompt injection, API key, quota, chi phí) ở
+`docs/SECURITY.md`; tra cứu module ở `docs/MODULES.md`.
 
 Test dùng `QT_QPA_PLATFORM=offscreen` nên chạy được trên máy chủ không có màn hình.
 Test cũng tự dùng thư mục tạm cho cấu hình, không ghi vào cấu hình thật của bạn.

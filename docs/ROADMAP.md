@@ -95,6 +95,32 @@ qua cửa sổ).
 
 ---
 
+## Hạn chế đã biết của Giai đoạn 4
+
+Ghi rõ để không hiểu nhầm là đã hoàn hảo. (Trước đây mục này nằm trong
+`SECURITY.md`; đã chuyển về đây vì nó là **trạng thái**, không phải thiết kế.)
+
+1. **Chưa kiểm tra chéo response của provider.** Tin vào cấu trúc JSON của
+   Groq/Gemini; nếu họ đổi schema, `ProviderError("bad_response")` và pet báo
+   lỗi (không crash) — nhưng không tự phát hiện được.
+
+2. **Chưa có xác thực chứng chỉ tuỳ chỉnh.** Dùng CA mặc định của hệ thống.
+   Môi trường có proxy chèn chứng chỉ sẽ không kết nối được.
+
+3. **`open_url` mở bằng trình duyệt mặc định** qua `QDesktopServices`. Nếu
+   máy đặt mặc định là ứng dụng lạ, ứng dụng đó nhận URL. Ngoài phạm vi kiểm
+   soát của app.
+
+4. **`open_url` không kiểm tra giá trị trả về.** Nếu không có trình duyệt,
+   `openUrl()` trả `False` nhưng người dùng không thấy phản hồi gì. (~5 dòng
+   để sửa.)
+
+5. **Chưa có giới hạn theo chi phí tiền tệ**, chỉ theo số lượt và độ dài.
+
+6. **Chưa kiểm thử trên máy có màn hình thật** — xem mục dưới.
+
+---
+
 ## Đang có vấn đề, nên làm sớm
 
 ### 🟡 Chưa kiểm thử trên máy có màn hình thật
@@ -156,7 +182,32 @@ không có whitelist đường dẫn tuyệt đối.
 - [ ] Cỡ chữ bong bóng
 - [ ] ~80 dòng
 
-### 6. Nhiều pet cùng lúc ⛔
+### 6. AI agent dùng trình duyệt ⛔
+
+Thiết kế đầy đủ: [`BROWSER-AGENT.md`](BROWSER-AGENT.md). Chưa code.
+
+Tóm tắt: agent điều khiển **trình duyệt riêng, sạch, profile tạm** — không
+phải Chrome bạn đang dùng. 4 công cụ (open/read_text/click/type), giới hạn 10
+bước, 30s/trang, xác nhận trước mỗi tác vụ. Rủi ro chính là prompt injection
+từ nội dung trang.
+
+Cần Playwright (~150 MB, cài riêng), không nằm trong `requirements.txt` chính.
+
+Đánh đổi: môi trường phát triển hiện tại **không chạy được Chrome**, nên chỉ
+test được `policy.py` và phần lớn `session.py`. Phải nhờ người dùng kiểm chứng
+phần mở trang thật.
+
+### 7. Bộ nhớ dài hạn ⛔
+
+Thiết kế đầy đủ: [`MEMORY.md`](MEMORY.md). Chưa code.
+
+Hiện chỉ có sổ tay do người dùng tự gõ. Thiếu: lịch sử hội thoại (hiểu "cái
+kia"), memory do pet đề xuất, hạn dùng.
+
+Đề nghị làm **lịch sử hội thoại trong RAM** trước — rủi ro gần 0 (mất khi tắt
+app), giá trị cao nhất.
+
+### 8. Nhiều pet cùng lúc ⛔
 
 Kiến trúc hiện tại một `PetWindow` = một pet. Muốn nhiều pet phải đổi
 `__main__` thành vòng lặp tạo nhiều cửa sổ. Không khó nhưng ảnh hưởng config
@@ -169,7 +220,8 @@ Kiến trúc hiện tại một `PetWindow` = một pet. Muốn nhiều pet ph�
 | Việc | Lý do |
 |---|---|
 | ❌ Giọng nói (Giai đoạn 5) | Đã bỏ theo yêu cầu; mic liên tục là rủi ro riêng tư |
-| ❌ Điều khiển trình duyệt qua CDP | Cần tắt sandbox Chrome; mọi tab đều chạm được cổng đó |
+| ❌ Điều khiển **Chrome bạn đang dùng** (CDP trên profile cá nhân, extension `<all_urls>`) | Đọc được toàn bộ việc duyệt web, cookie, mật khẩu |
+| ✅ *Ngoại lệ:* điều khiển **trình duyệt riêng, profile tạm** | Được — xem [`BROWSER-AGENT.md`](BROWSER-AGENT.md). Đây là thứ khác hẳn dòng trên |
 | ❌ Chạy shell từ kết quả model | Không bao giờ. Xem `docs/SECURITY.md` mục 7 |
 | ❌ Đọc/ghi file tuỳ ý theo yêu cầu model | Như trên |
 | ❌ Tự tải và chạy mã từ mạng | Như trên |

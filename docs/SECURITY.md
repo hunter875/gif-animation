@@ -15,23 +15,32 @@ Giai đoạn 5 (giọng nói) đã **bỏ khỏi phạm vi** theo yêu cầu, n�
 
 ---
 
-## 1. Hiện trạng: những gì đã có
+## 1. Ràng buộc nền
 
-Các cơ chế này đã nằm trong code từ Giai đoạn 1–3 và cần được giữ nguyên:
+Những nguyên tắc dưới đây phải luôn đúng, ở mọi phiên bản. Nếu một thay đổi
+phá vỡ một dòng trong bảng này, thay đổi đó sai.
 
-| Cơ chế | Ở đâu | Ghi chú |
-|---|---|---|
-| ✅ Không chạy lệnh shell tuỳ ý | `pet_window.py:_x11_fullscreen_active` | Chỉ `xprop` với danh sách tham số cố định, `timeout=2` |
-| ✅ Không có network | `requirements.txt` | Chỉ `PyQt5` |
-| ✅ Cấu hình ngoài repo | `core/config.py:config_dir` | XDG / AppData / Application Support |
-| ✅ Ghi atomic | `core/config.py:save` | `mkstemp` + `os.replace` + `fsync` |
-| ✅ Chịu được file hỏng | `core/config.py:_coerce` | Giá trị sai kiểu → về mặc định, không crash |
-| ✅ Trần tài nguyên | `run.sh` | 700 MB RAM qua `prlimit` |
-| ✅ Lỗi không giết app | `pet_window.py:_guarded` | Bọc mọi timer |
-| ✅ AI tắt mặc định | `config.py:DEFAULTS` | `ai_enabled: False` |
+| Ràng buộc | Kiểm bằng |
+|---|---|
+| Không chạy lệnh shell tuỳ ý | `test_security.py::TestNoArbitraryExecution` |
+| `shell=True` không có ở bất kỳ đâu | `::test_khong_co_shell_true_o_bat_ky_dau` |
+| Chỉ `ai/provider.py` mở kết nối mạng | `::test_chi_provider_mo_ket_noi_mang` |
+| `actions.py` chỉ `urlsplit`, không kết nối | `::test_provider_co_import_urllib` (đối chiếu) |
+| Chỉ `ui/window_skin.py` gọi `subprocess` | `::test_chi_window_skin_goi_subprocess` |
+| Đúng một lời gọi `subprocess.run` | `::test_chi_mot_loi_goi_subprocess_trong_window_skin` |
+| `xprop` dùng list, không shell | `::test_xprop_dung_danh_sach_tham_so_co_dinh` |
+| Cấu hình nằm ngoài repo | `::test_config_ghi_ra_ngoai_repo` |
+| File cấu hình quyền `0600` | `::test_config_file_quyen_chan_nguoi_khac_doc` |
+| Không có trường bí mật trong `config.json` | `::test_config_khong_co_truong_chua_key` |
+| AI tắt mặc định | `::test_ai_tat_mac_dinh` |
+| Ghi file atomic | `test_core.py` (nhóm config) |
+| File hỏng không crash | `test_core.py`, `test_ai.py::TestSecrets::test_file_hong_khong_lam_crash` |
+| Trần RAM 700 MB | `run.sh`, đo tay bằng `prlimit` |
+| Lỗi trong timer không giết app | `test_stability.py::TestErrorGuard` |
 
 **Nguyên tắc nền:** app là pet trang trí. Nó không cần quyền gì để làm việc
-của mình. Mọi quyền thêm vào đều phải chứng minh là cần thiết.
+của mình. Mọi quyền thêm vào đều phải chứng minh là cần thiết, và phải có
+dòng tương ứng trong bảng trên.
 
 ---
 
@@ -397,57 +406,20 @@ không phải thêm vào một tiến trình GUI chạy nền.
 
 ---
 
-## 8. Trạng thái triển khai (Giai đoạn 4)
+---
 
-Phần trên là thiết kế. Mục này ghi lại **những gì đã làm thật** và những hạn
-chế còn lại, để không ai đọc tài liệu rồi tưởng nhiều hơn thực tế.
+## 8. Khi nào phải sửa tài liệu này
 
-### Đã triển khai
+`SECURITY.md` mô tả **ràng buộc thiết kế**, không mô tả trạng thái code.
+Trạng thái (cái gì đã làm, hạn chế gì) nằm ở `ROADMAP.md`.
 
-| Hạng mục | File | Ghi chú |
-|---|---|---|
-| Whitelist hành động | `gifpet/ai/actions.py` | 5 hành động; kiểm tên/kiểu/miền giá trị |
-| Chặn URL nguy hiểm | `gifpet/ai/actions.py` | Chỉ `https`; chặn localhost, IP nội bộ, metadata cloud |
-| Tách dữ liệu khỏi chỉ dẫn | `gifpet/ai/brain.py` | JSON có `type`; không nối vào system prompt |
-| Xác nhận hành động | `gifpet/ui/pet_window.py` | `QMessageBox`, mặc định là "Không" |
-| Bộ nhớ chỉ ghi chú người dùng | `gifpet/ai/memory.py` | `kind` khác `user_note` bị từ chối |
-| API key tách riêng | `gifpet/ai/secrets.py` | Env hoặc `secrets.json` 0600, thư mục 0700 |
-| Quota | `gifpet/ai/quota.py` | Đếm trước khi gửi, reset theo ngày, chống đồng hồ lùi |
-| Rate limit | `gifpet/ai/quota.py` | 1.5 giây giữa hai lượt |
-| Không gọi model cho sự kiện pet | `gifpet/ai/brain.py` | `MODEL_EVENT_KINDS` chỉ có chat/clipboard |
-| Provider có timeout | `gifpet/ai/provider.py` | 20 giây, key trong header |
-| Test | `tests/test_ai.py` | 64 test, không gọi mạng thật |
+Phải sửa file này khi:
 
-### Đã sửa sau bản đầu
+- Thêm hành động mới vào whitelist → cập nhật mục 2.3
+- Thêm bề mặt tấn công mới (mạng, trình duyệt, file) → cập nhật mục 7
+- Đổi cách xử lý API key → cập nhật mục 3
+- Đổi cơ chế quota → cập nhật mục 4
+- Quyết định làm một thứ trong mục 7 → **bỏ nó khỏi mục 7 và ghi lý do**
 
-- **`remind` giờ sống qua lần tắt app** — lưu `reminders.json`, quét mỗi 5
-  giây, bỏ lời nhắc quá hạn >24h (`core/reminders.py`).
-- **`ai_proactive` giờ có tác dụng** — gom sự kiện 60 giây, trần riêng 10
-  lượt/ngày, không chạy trong giờ tập trung (`core/proactive.py`).
-
-### Hạn chế đã biết
-
-Ghi rõ để không hiểu nhầm là đã hoàn hảo:
-
-1. **Chưa kiểm tra chéo response của provider.** Tin vào đúng cấu trúc JSON
-   của Groq/Gemini; nếu họ đổi schema, `ProviderError("bad_response")` và pet
-   báo lỗi, không crash — nhưng không tự phát hiện được.
-
-2. **Chưa có xác thực chứng chỉ tuỳ chỉnh.** Dùng CA mặc định của hệ thống.
-   Môi trường có proxy chèn chứng chỉ sẽ không kết nối được.
-
-3. **`open_url` mở bằng trình duyệt mặc định** qua `QDesktopServices`. Nếu hệ
-   thống đã bị chiếm quyền, trình duyệt mặc định có thể là thứ khác — ngoài
-   phạm vi app kiểm soát được.
-
-4. **Chưa có giới hạn theo chi phí tiền tệ**, chỉ giới hạn theo số lượt và độ
-   dài. Nếu nhà cung cấp đổi giá, trần tiền vẫn chưa được tính.
-
-### Kiểm chứng
-
-```bash
-./run.sh --test        # có test_ai.py (64 test)
-```
-
-Không gọi mạng thật: mọi test dùng `FakeProvider`. Muốn thử thật thì tự nhập
-key và bật `ai_enabled` trong Cài đặt.
+Mục 7 ("Điều không làm") là danh sách **cứng**. Không được tự ý thêm tính năng
+nằm trong đó mà không sửa tài liệu trước.
