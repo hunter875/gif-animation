@@ -261,15 +261,54 @@ test vô dụng.
 **Hạn chế:** không kiểm chứng được độ mượt, độ trong suốt, click xuyên thật.
 Phải nhờ người dùng xác nhận.
 
-### Chrome không chạy được (cho browser agent)
+### Chrome không chạy được (chặn hướng B/C của browser agent)
 
-**Triệu chứng:** `touch: cannot touch '/home/devuser/.local/share/applications/mimeapps.list'`,
-`chrome_crashpad_handler: --database is required`, core dump.
+Đã **thử thật** và fail ở nhiều mức:
 
-**Nguyên nhân:** sandbox chặn ghi thư mục profile và crashpad.
+```bash
+# 1. dump-dom cơ bản
+google-chrome --headless --disable-gpu --no-sandbox \
+  --dump-dom "data:text/html,<h1>Xin chao</h1>"
+# -> Touch: cannot touch '~/.local/share/applications/mimeapps.list': Permission denied
+# -> Failed to create headless user data directory container.
+# -> exit 0 nhưng KHÔNG có output
 
-**Hệ quả:** không kiểm chứng được browser agent trên máy phát triển. Phải thiết
-kế để phần lớn logic test được không cần Chrome (xem `BROWSER-AGENT.md`).
+# 2. thêm --user-data-dir riêng
+google-chrome --headless --user-data-dir=/tmp/cprof --dump-dom "..."
+# -> exit 0, output rỗng
+
+# 3. thêm --headless=new --virtual-time-budget
+# -> chrome_crashpad_handler: --database is required
+# -> timeout: the monitored command dumped core
+```
+
+**Nguyên nhân:** sandbox chặn ghi `~/.local/share/applications` và thư mục
+crashpad. `/tmp` thì ghi được nhưng Chrome vẫn không render.
+
+**Hệ quả với dự án:** mọi hướng cần điều khiển trình duyệt (Playwright, CDP)
+**không kiểm chứng được** trên máy này. Xem `BROWSER-AGENT.md` mục "Kiểm chứng".
+
+**Cách xử lý nếu vẫn phải làm:** thiết kế để phần lớn logic nằm ở module
+thuần tuý (`policy.py`) test được không cần Chrome; phần mở trang thật để
+người dùng kiểm chứng.
+
+**Còn Firefox? Đã thử, cũng fail.**
+
+```bash
+firefox --headless --profile /tmp/ff --screenshot /tmp/ff.png "data:text/html,<h1>x</h1>"
+# -> internal error: cannot create XDG_RUNTIME_DIR folder
+#    "/run/user/1003/snap.firefox": mkdir: permission denied
+
+XDG_RUNTIME_DIR=/tmp/xdgr firefox --headless ...
+# -> cùng lỗi: bản snap vẫn cố ghi vào /run/user/1003
+```
+
+Firefox trên máy này là **bản snap**, và nó cứng nhắc dùng
+`/run/user/<uid>/snap.firefox` — không tôn trọng `XDG_RUNTIME_DIR`. Không có
+quyền tạo thư mục đó nên không chạy được.
+
+**Kết luận:** cả Chrome và Firefox đều không chạy được trong môi trường phát
+triển này. Không phải lỗi cấu hình — là giới hạn sandbox.
 
 ### Nuitka
 

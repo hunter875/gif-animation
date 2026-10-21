@@ -182,20 +182,23 @@ không có whitelist đường dẫn tuyệt đối.
 - [ ] Cỡ chữ bong bóng
 - [ ] ~80 dòng
 
-### 6. AI agent dùng trình duyệt ⛔
+### 6. Pet điều khiển trình duyệt 🟡 **chưa quyết định**
 
-Thiết kế đầy đủ: [`BROWSER-AGENT.md`](BROWSER-AGENT.md). Chưa code.
+**Có yêu cầu, chưa chọn hướng, chưa code.** Ba hướng và so sánh đầy đủ:
+[`BROWSER-AGENT.md`](BROWSER-AGENT.md).
 
-Tóm tắt: agent điều khiển **trình duyệt riêng, sạch, profile tạm** — không
-phải Chrome bạn đang dùng. 4 công cụ (open/read_text/click/type), giới hạn 10
-bước, 30s/trang, xác nhận trước mỗi tác vụ. Rủi ro chính là prompt injection
-từ nội dung trang.
+| Hướng | Làm được gì | Đánh đổi |
+|---|---|---|
+| A — mở rộng `open_url` | Mở trang, tìm kiếm | Không đọc/bấm được; **không đụng bảo mật** |
+| B — Chromium riêng (Playwright) | Đọc, bấm, gõ | +~490 MB; phải sửa `SECURITY.md` mục 7 |
+| C — điều khiển trình duyệt của bạn | Đọc, bấm, gõ, dùng phiên đăng nhập | Rủi ro dữ liệu **cao**; sửa nhiều |
 
-Cần Playwright (~150 MB, cài riêng), không nằm trong `requirements.txt` chính.
+Ràng buộc đang cấm B và C: `SECURITY.md` mục 7 ghi ⛔ điều khiển trình duyệt,
+và `test_security.py` khoá chỉ `window_skin.py` được `subprocess`. Làm B/C
+**bắt buộc** sửa cả hai, có chủ đích.
 
-Đánh đổi: môi trường phát triển hiện tại **không chạy được Chrome**, nên chỉ
-test được `policy.py` và phần lớn `session.py`. Phải nhờ người dùng kiểm chứng
-phần mở trang thật.
+Chưa quyết vì cần trả lời 7 câu hỏi trong `BROWSER-AGENT.md`, trong đó quan
+trọng nhất là: **chấp nhận +490 MB và mất khả năng kiểm chứng tự động không?**
 
 ### 7. Bộ nhớ dài hạn ⛔
 
@@ -221,7 +224,7 @@ Kiến trúc hiện tại một `PetWindow` = một pet. Muốn nhiều pet ph�
 |---|---|
 | ❌ Giọng nói (Giai đoạn 5) | Đã bỏ theo yêu cầu; mic liên tục là rủi ro riêng tư |
 | ❌ Điều khiển **Chrome bạn đang dùng** (CDP trên profile cá nhân, extension `<all_urls>`) | Đọc được toàn bộ việc duyệt web, cookie, mật khẩu |
-| ✅ *Ngoại lệ:* điều khiển **trình duyệt riêng, profile tạm** | Được — xem [`BROWSER-AGENT.md`](BROWSER-AGENT.md). Đây là thứ khác hẳn dòng trên |
+| 🟡 Điều khiển **trình duyệt riêng, profile tạm** | **Chưa quyết.** Về nguyên tắc an toàn hơn dòng trên, nhưng vẫn đụng `SECURITY.md` mục 7. Xem [`BROWSER-AGENT.md`](BROWSER-AGENT.md) |
 | ❌ Chạy shell từ kết quả model | Không bao giờ. Xem `docs/SECURITY.md` mục 7 |
 | ❌ Đọc/ghi file tuỳ ý theo yêu cầu model | Như trên |
 | ❌ Tự tải và chạy mã từ mạng | Như trên |

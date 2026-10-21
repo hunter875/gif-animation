@@ -404,6 +404,28 @@ Ghi rõ để sau này không ai tự ý thêm vào:
 Nếu một tính năng cần một trong những quyền trên, nó phải là **tool riêng**,
 không phải thêm vào một tiến trình GUI chạy nền.
 
+### Đang xem xét (chưa quyết định)
+
+Có yêu cầu cho pet **điều khiển trình duyệt**. Yêu cầu này đụng trực tiếp vào
+gạch đầu dòng ⛔ số 3 ở trên.
+
+**Chưa có quyết định.** Ba hướng đang được ghi lại và so sánh ở
+[`BROWSER-AGENT.md`](BROWSER-AGENT.md):
+
+| Hướng | Đụng vào mục 7? |
+|---|---|
+| A — mở rộng `open_url` (chỉ mở trang, không đọc/bấm) | Không |
+| B — Chromium **riêng**, profile tạm | Có, cần sửa |
+| C — điều khiển trình duyệt **của người dùng** | Có, sửa nhiều |
+
+Nếu chọn B: cần thêm ngoại lệ có điều kiện vào mục này, kèm lý do và ràng
+buộc. Nếu chọn C: phải ghi rõ người dùng chịu rủi ro và cảnh báo tường minh
+khi bật.
+
+**Quy tắc giữ nguyên:** không được thêm ngoại lệ lặng lẽ. Mọi thay đổi ở mục
+này phải đi kèm thay đổi tương ứng trong `test_security.py` và một dòng
+"đang xem xét" như trên được thay bằng quyết định thật.
+
 ---
 
 ---
