@@ -69,6 +69,18 @@ DEFAULTS = {
     "ai_proactive": False,
     # Tran rieng cho "pet tu noi", thap hon ai_daily_limit nhieu.
     "ai_proactive_limit": 10,
+    # --- Thong bao (Giai doan moi, pham vi chi nhan/hien thi) ---
+    # Pet chi doc mot thu muc inbox chuyen dung, hien thi plain text, khong
+    # goi AI hay chay lenh. Xem docs/MODULAR-ASSISTANT.md va
+    # docs/SECURITY.md. Chi tiet dedup/history/cai dat hien thi nam trong
+    # notifications_state.json (cung thu muc cau hinh).
+    "notifications_enabled": True,
+    "notifications_poll_ms": 2000,
+    # "" = dung thu muc mac dinh: <config dir>/notifications-inbox.
+    "notifications_inbox": "",
+    "notifications_max_queue": 32,
+    "notifications_bubble": True,
+    "notifications_tray": True,
 }
 
 
@@ -86,6 +98,15 @@ def config_dir():
 
 def config_path():
     return os.path.join(config_dir(), "config.json")
+
+
+def default_inbox_dir():
+    """Thu muc inbox thong bao mac dinh: trong thu muc cau hinh, ngoai repo.
+
+    Nguoi dung co the doi sang thu muc chia se (vi du workspace cua Hermes)
+    trong Cai dat; pet chi doc dung thu muc duoc cau hinh.
+    """
+    return os.path.join(config_dir(), "notifications-inbox")
 
 
 def _coerce(value, default):

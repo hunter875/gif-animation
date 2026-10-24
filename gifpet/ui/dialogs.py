@@ -257,6 +257,8 @@ class SettingsDialog(QDialog):
         self.ai_key_clear.clicked.connect(self._clear_key)
         self._pending_key = None
 
+        self._build_notification_section(config, layout)
+
         note = QLabel(
             "Khi bật “Click xuyên qua pet”, chuột sẽ không bấm được vào pet. "
             "Dùng khay hệ thống hoặc phím tắt để tắt lại.\n\n"
@@ -272,6 +274,60 @@ class SettingsDialog(QDialog):
         box.accepted.connect(self.accept)
         box.rejected.connect(self.reject)
         layout.addWidget(box)
+
+    # ------------------------------------------------------------------
+    # Thong bao (chi nhan va hien thi, khong phai lenh)
+    # ------------------------------------------------------------------
+    def _build_notification_section(self, config, layout):
+        """Muc cai dat thong bao. Khong doc/ghi file, chi doc gia tri config."""
+        layout.addWidget(QLabel("<b>Thông báo từ các nguồn</b>", self))
+
+        form = QFormLayout()
+
+        self.notifications_enabled = QCheckBox("Bật nhận thông báo", self)
+        self.notifications_enabled.setChecked(
+            bool(config.get("notifications_enabled", True))
+        )
+        form.addRow(self.notifications_enabled)
+
+        self.notifications_inbox = QLineEdit(self)
+        self.notifications_inbox.setPlaceholderText("để trống = thư mục mặc định")
+        self.notifications_inbox.setText(
+            str(config.get("notifications_inbox", "") or "")
+        )
+        form.addRow("Thư mục hộp thư:", self.notifications_inbox)
+
+        self.notifications_poll = QSpinBox(self)
+        self.notifications_poll.setRange(1, 60)
+        self.notifications_poll.setSuffix(" giây")
+        poll_ms = config.get("notifications_poll_ms", 2000)
+        try:
+            seconds = max(1, int(round(int(poll_ms) / 1000.0)))
+        except (TypeError, ValueError):
+            seconds = 2
+        self.notifications_poll.setValue(min(60, seconds))
+        form.addRow("Khoảng kiểm tra:", self.notifications_poll)
+
+        self.notifications_bubble = QCheckBox("Hiện bong bóng thoại", self)
+        self.notifications_bubble.setChecked(
+            bool(config.get("notifications_bubble", True))
+        )
+        form.addRow(self.notifications_bubble)
+
+        self.notifications_tray = QCheckBox("Hiện thông báo khay hệ thống", self)
+        self.notifications_tray.setChecked(bool(config.get("notifications_tray", True)))
+        form.addRow(self.notifications_tray)
+
+        layout.addLayout(form)
+
+        note = QLabel(
+            "Thông báo chỉ là chữ do nguồn gửi tới. Pet không chạy lệnh, không mở "
+            "đường dẫn, không gọi model và không ghi vào bộ nhớ. Pet chỉ đọc thư "
+            "mục hộp thư ở trên.",
+            self,
+        )
+        note.setWordWrap(True)
+        layout.addWidget(note)
 
     # ------------------------------------------------------------------
     # Bo nho va API key
@@ -333,4 +389,9 @@ class SettingsDialog(QDialog):
             "click_through": self.click_through.isChecked(),
             "hide_on_fullscreen": self.hide_fullscreen.isChecked(),
             "pin_to_top": self.pin.isChecked(),
+            "notifications_enabled": self.notifications_enabled.isChecked(),
+            "notifications_inbox": self.notifications_inbox.text().strip(),
+            "notifications_poll_ms": self.notifications_poll.value() * 1000,
+            "notifications_bubble": self.notifications_bubble.isChecked(),
+            "notifications_tray": self.notifications_tray.isChecked(),
         }
