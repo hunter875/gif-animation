@@ -256,13 +256,15 @@ class HistoryDialogTests(UiCase):
     def test_missing_inbox_does_not_crash_dialog(self):
         """Hop thu bien mat: cua so lich su van phai mo duoc."""
         empty = os.path.join(self.root, "bi-xoa")
-        self.controller.set_inbox(empty)
+        self.config.data["notifications_inbox"] = empty
+        notification_panel.apply_config(self.window)
         if os.path.isdir(empty):
             os.rmdir(empty)
         dialog = self.dialog()
         self.addCleanup(dialog.deleteLater)
         dialog._refresh()
         self.assertEqual(self._list(dialog).count(), 0)
+        self.assertIn(empty, self._status(dialog).text())
 
     def test_history_view_limit(self):
         self.populate(notification_panel.HISTORY_VIEW_LIMIT + 10)
