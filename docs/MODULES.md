@@ -290,7 +290,8 @@ Chuỗi thuần Python (không Qt, trừ UI): `models` (kiểu dữ liệu + val
 - `build_state(config)` dùng `config.path` của đối tượng cấu hình được truyền
   vào, nên hồ sơ cấu hình cách ly đúng thay vì đọc `config.json` toàn cục.
 - Không có chat, không điều khiển tác vụ, không mở URL, không chạy lệnh, không
-  gọi AI. Test cho phần này **chưa được chạy** trong lượt sửa này.
+  gọi AI. Test đã chạy; kết quả và giới hạn tại
+  [`NOTIFICATIONS-VALIDATION.md`](NOTIFICATIONS-VALIDATION.md).
 
 ---
 

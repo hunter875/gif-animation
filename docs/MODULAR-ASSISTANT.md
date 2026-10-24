@@ -10,7 +10,7 @@ Hermes hoặc chương trình khác gửi notification → pet hiện bong bóng
 
 - Model thuần Python: version, id, source, title, message, severity, created_at, expires_at. Validate kiểu, độ dài và thời gian hữu hạn; severity chỉ info/success/warning/error. Nội dung plain text, không HTML/shell/URL action/lệnh.
 - NotificationSource protocol: id, display name, poll(limit) -> notifications. Registry đăng ký implementation trusted bằng code, từ chối id trùng. Thêm source mới không sửa PetWindow. Không phải sandbox plugin không tin cậy.
-- Inbox source nhận từng file JSON trong thư mục chuyên dụng. Producer ghi temp rồi replace atomic. Consumer chỉ đọc file thường, không theo symlink/reparse/hardlink đáng ngờ; giới hạn byte/file/số lượng và không đọc ngoài thư mục cấu hình. File hỏng/quá hạn được bỏ qua có chẩn đoán, không crash/spam log. Không xóa file ngoài inbox, không mở URL/artifact từ nội dung. Implementation chốt rõ ack/retention: pet **không xoá** tệp trong hộp thư và tự bỏ qua tệp đã hiển thị (dedup theo id); tệp quá hạn theo `expires_at` bị bỏ qua.
+- Inbox source nhận từng file JSON trong thư mục chuyên dụng. Producer ghi temp rồi replace atomic. Consumer chỉ đọc file thường, kiểm tra symlink/reparse/hardlink và descriptor sau khi mở; giới hạn byte/file/số lượng. File hỏng/quá hạn được bỏ qua có chẩn đoán, không crash/spam log. Ack chỉ xoá tệp notification hợp lệ có tên khớp id sau khi xử lý; kiểm tra lại trước khi xoá. JSON không liên quan hoặc hỏng được giữ nguyên. Dedup theo id; không mở URL/artifact từ nội dung. Dùng inbox chuyên dụng; đây không phải sandbox OS cho tiến trình đối địch.
 - Dispatcher/controller dùng Qt timer và queue bounded, rate limit và dedup theo id. Seen/history bounded riêng ở config user để hạn chế replay sau restart. Poll có lượng việc giới hạn, không network/subprocess/model trên GUI thread. Bật lại sau mute không đổ tin đã hết hạn.
 - UI nhận signal, hiển thị plain text, lịch sử giới hạn, tùy chọn bubble/tray, pause/mute và chỉ báo nguồn. Không tự gọi AI hay thực thi từ notification.
 
@@ -22,7 +22,8 @@ Mặc định inbox dưới config user (Windows APPDATA/GifAnimation); UI cho c
 
 ## Trạng thái triển khai (24/10/2026)
 
-Đã có code, **chưa có test tự động nào được chạy trong lần sửa này** (chờ lượt chạy cuối của người phụ trách):
+Đã tích hợp và kiểm chứng trên Windows bằng Qt offscreen, cùng core trên Linux.
+Kết quả cụ thể ở [`NOTIFICATIONS-VALIDATION.md`](NOTIFICATIONS-VALIDATION.md):
 
 - `gifpet/notifications/`: `models.py`, `sender.py`, `inbox.py`, `controller.py`,
   `dispatcher.py`, `registry.py`, `state.py`.
@@ -54,9 +55,10 @@ Giới hạn đã chốt: mỗi vòng quét chỉ xét tối đa 2000 mục thư
 **không** bị xoá: chúng hiện lại sau khi bỏ tạm im hoặc bị loại khi hết hạn.
 Không có chat, không điều khiển tác vụ, không tự mở URL, không chạy lệnh.
 
-Chưa làm / chưa kiểm chứng: test của DS-B chưa chạy, chạy thử tay trên Windows,
-và đường dẫn inbox thật của Hermes. Không có auto-hook nào được cài trong
-Hermes, nên **không** khẳng định mọi task Hermes tự gửi tin.
+Test do DS-B viết đã được Codex chạy, kiểm tra và bổ sung kiểm chứng độc lập.
+Chưa kiểm chứng: thao tác tay trên desktop Windows, thông báo OS và đường
+dẫn inbox thật của Hermes. Không có auto-hook nào được cài trong Hermes,
+nên **không** khẳng định mọi task Hermes tự gửi tin.
 
 ## Phân công
 

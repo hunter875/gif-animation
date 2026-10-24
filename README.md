@@ -104,9 +104,8 @@ với các khoá `id`, `source`, `title`, `message`, `severity`, `created_at`,
 dấu chấm bị bỏ qua.
 
 > Đây là **phần nhận** của MVP: pet chỉ hiển thị những gì được gửi tới.
-> Chưa có chat, chưa có điều khiển tác vụ, và **chưa có bộ test tự động cho
-> phần này** — xem `docs/ROADMAP.md`. Test của phần thông báo đang chờ lượt
-> chạy cuối của người phụ trách.
+> Phần nhận/hiển thị đã qua test; chưa cài hook tự báo hoàn thành cho Hermes.
+> Kết quả và giới hạn: [`docs/NOTIFICATIONS-VALIDATION.md`](docs/NOTIFICATIONS-VALIDATION.md).
 
 **Khay hệ thống**
 Menu khay gồm: hiện/ẩn pet, tạm dừng animation, tự động đổi GIF, pet tự đi,
@@ -277,15 +276,16 @@ Cấu trúc:
 Chạy test:
 
 ```bash
-./run.sh --test      # tất cả 273 test đơn vị
+./run.sh --test      # bộ test đơn vị
 ./run.sh --accept    # 17 tiêu chí nghiệm thu
 ./run.sh --phase3    # 16 bước vòng đời Giai đoạn 3
 # hoặc
 QT_QPA_PLATFORM=offscreen .venv/bin/python tests/test_core.py
 ```
 
-Phần thông báo (nhận/hiển thị) **chưa có test tự động được chạy trong lần
-sửa này**; muốn thử tay thì chạy
+Phần thông báo có 140 test mới: Windows 139 đạt, 1 skip; core Linux 92/92 đạt.
+Bộ cũ còn 4 lỗi nền trên Windows; xem
+[`báo cáo kiểm chứng`](docs/NOTIFICATIONS-VALIDATION.md). Muốn thử tay thì chạy
 `python tools/notify_pet.py --source thu --title "Xin chào" --message "Thử"`.
 
 Tài liệu có mục lục riêng: [`docs/README.md`](docs/README.md).

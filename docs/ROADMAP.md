@@ -8,19 +8,21 @@ Chủ dự án thu gọn phạm vi: chỉ hiển thị thông báo, bỏ giao vi
 
 | Giai đoạn | Phạm vi | Trạng thái |
 |---|---|---|
-| N0 | Payload/protocol/registry cho nguồn notification | 🟡 Code xong (`gifpet/notifications/models.py`, `registry.py`), **chờ lượt chạy test cuối** |
-| N1 | Inbox JSON + producer CLI + validation/expiry/dedup | 🟡 Code xong (`inbox.py`, `sender.py`, `controller.py`, `tools/notify_pet.py`), **chờ lượt chạy test cuối** |
-| N2 | Bubble/tray/history/settings, mute và giới hạn spam | 🟡 UI đã nối vào pet (`ui/notification_panel.py`, `ui/tray_menu.py`); mute không xoá thông báo đang chờ; **chờ lượt chạy test cuối, chưa thử tay trên Windows** |
-| N3 | Hướng dẫn nguồn Hermes và chương trình ngoài gửi tin | 🟡 Có hướng dẫn CLI trong `README.md`; đường dẫn Hermes thật **chưa thử** |
-| N4 | DS-B test độc lập, Codex tích hợp/test và nghiệm thu | ⛔ Chưa làm |
+| N0 | Payload/protocol/registry cho nguồn notification | ✅ Đã tích hợp; kiểm tra schema, nguồn mở rộng và giới hạn |
+| N1 | Inbox JSON + producer CLI + validation/expiry/dedup | ✅ Test CLI/core, restart, file hostile và producer subprocess đạt |
+| N2 | Bubble/tray/history/settings, mute và giới hạn spam | ✅ 28 test UI offscreen đạt; chưa kiểm tra tương tác desktop/tray OS thật |
+| N3 | Hướng dẫn nguồn Hermes và chương trình ngoài gửi tin | 🟡 CLI và hướng dẫn có sẵn; chưa cài hook tự báo hoàn thành hoặc nối mount Hermes thật |
+| N4 | DS-B test độc lập, Codex tích hợp/test và nghiệm thu | ✅ Phần thông báo đạt phạm vi kiểm chứng; regression giữ nguyên 4 lỗi nền đã ghi nhận |
 
-**Việc còn lại của MVP thông báo:** chạy bộ test độc lập cho
-`gifpet/notifications/*`, `gifpet/ui/notification_panel.py`,
-`tools/notify_pet.py` và phần nối trong `pet_window`/`tray_menu`; chạy thử tay
-trên Windows (bong bóng, khay, tạm im, xoá lịch sử); xác nhận lại đường dẫn
-inbox của Hermes. Cho tới lúc đó phần này được coi là **chưa nghiệm thu**, chỉ
-nên dùng để thử. Lượt sửa này **không chạy test** (môi trường không có shell);
-kết quả nghiệm thu do người phụ trách chạy.
+Kết quả: 140 test mới trên Windows gồm **139 đạt, 1 skip** (quyền tạo
+symlink); 92 test core trên Linux **đều đạt**, gồm symlink thật. CLI → inbox
+→ UI Qt thật đã chạy offscreen và render ảnh. Acceptance 17/17, lifecycle
+16/16 đạt; 4 lỗi của bộ test cũ còn nguyên như baseline trước tính năng.
+Chi tiết và giới hạn: [`NOTIFICATIONS-VALIDATION.md`](NOTIFICATIONS-VALIDATION.md).
+
+**Còn chưa kiểm chứng:** thao tác tay trên desktop Windows và thông báo của
+OS; kết nối mount/hook Hermes thật. Không có hook tự báo khi mọi task Hermes
+hoàn thành được cài trong lượt này.
 
 Lịch sử bên dưới phản ánh các giai đoạn cũ, không thay thế kết quả review
 Windows ngày 24/10/2026. Fullscreen trên Windows, hotkey toàn hệ thống và
