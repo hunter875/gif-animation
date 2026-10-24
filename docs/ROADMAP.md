@@ -1,5 +1,25 @@
 # Roadmap
 
+## Kế hoạch mới — Pet trợ lý dạng module (24/10/2026)
+
+Chủ dự án đã duyệt triển khai. Đặc tả, cách thực thi và tiêu chí test:
+[`MODULAR-ASSISTANT.md`](MODULAR-ASSISTANT.md).
+
+| Giai đoạn | Phạm vi | Trạng thái trước triển khai |
+|---|---|---|
+| M0 | Sửa UI blocking, test isolation Windows, error guard/config liên quan | Chưa làm |
+| M1 | Protocol + registry + background controller gắn thêm module | Chưa làm |
+| M2 | Chat panel, lịch sử phiên, chọn module, progress/cancel/result | Chưa làm |
+| M3 | Module Hermes Docker có session thật và hủy backend | Chưa làm |
+| M4 | Notes xem/thêm/sửa/xóa, thông báo kết thúc và tài liệu sử dụng | Chưa làm |
+| M5 | DS-B test độc lập, Codex tích hợp/test và nghiệm thu | Chưa làm |
+
+Lịch sử bên dưới phản ánh các giai đoạn cũ, không thay thế kết quả review
+Windows ngày 24/10/2026. Fullscreen trên Windows, hotkey toàn hệ thống và
+RSS regression trên Windows chưa được kiểm chứng hoàn chỉnh. Browser agent
+và long-term conversation memory cũ chưa được triển khai; transcript RAM ở
+MVP mới không đồng nghĩa long-term memory.
+
 Trạng thái tính đến commit hiện tại. Ghi rõ **đã xong / đang làm / chưa làm**,
 không đánh dấu hoàn thành cho thứ chưa kiểm chứng được.
 
