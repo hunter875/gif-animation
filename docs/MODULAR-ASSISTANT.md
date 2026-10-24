@@ -20,6 +20,25 @@ Helper tools/notify_pet.py nhận title/message/source/severity/TTL và optional
 
 Mặc định inbox dưới config user (Windows APPDATA/GifAnimation); UI cho chọn inbox riêng. Hermes Docker có thể xuất vào /workspace/pet-notifications, tương ứng D:\hermes-local\workspace\pet-notifications trên host; chọn đúng thư mục đó ở pet. Tài liệu hướng dẫn JSON/producer, không sửa profile/mount/key/scheduler/command runner Hermes. Không tuyên bố mọi task Hermes tự phát tin khi chưa có auto-hook.
 
+## Trạng thái triển khai (24/10/2026)
+
+Đã có code, **chưa có test tự động** cho phần này:
+
+- `gifpet/notifications/`: `models.py`, `sender.py`, `inbox.py`, `controller.py`,
+  `dispatcher.py`, `registry.py`, `state.py`.
+- `gifpet/ui/notification_panel.py`: timer polling, bong bóng thoại, thông báo
+  khay, cua so lịch sử, hộp thoại cài đặt, bật/tắt và tạm im.
+- Nối vào pet: `PetWindow._setup_notifications` (gọi một lần lúc khởi động),
+  `_apply_notification_settings` (sau khi đóng Cài đặt), bốn mục menu khay và
+  dọn timer/dialog trong `quit_app`/`closeEvent`.
+- `gifpet/ui/speech_bubble.py` có thêm cờ `plain` để nội dung ngoài luôn được
+  hiển thị dạng chữ thường, không diễn giải HTML.
+- `tools/notify_pet.py`: CLI độc lập (không cần PyQt).
+
+Chưa làm / chưa kiểm chứng: test của DS-B, chạy thử tay trên Windows, và đường
+dẫn inbox thật của Hermes. Không có auto-hook nào được cài trong Hermes, nên
+**không** khẳng định mọi task Hermes tự gửi tin.
+
 ## Phân công
 
 1. DS-A implementation model/protocol/registry/inbox/sender/controller, UI history/settings, wiring pet/tray, CLI và tài liệu. Chỉ thêm config notification; không xây chat/agent controller/browser/MCP hay đổi quyền AI hiện tại.

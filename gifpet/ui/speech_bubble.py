@@ -49,13 +49,19 @@ class SpeechBubble(QWidget):
         self.hide_timer.setSingleShot(True)
         self.hide_timer.timeout.connect(self.hide)
 
-    def say(self, text, duration_ms=6000, anchor=None):
+    def say(self, text, duration_ms=6000, anchor=None, plain=False):
         """Hien loi noi, tu dong an sau ``duration_ms``.
 
         ``anchor`` la QRect cua pet; bong bong se nam phia tren, canh giua.
+
+        ``plain=True`` ep hien thi van ban thuan: noi dung tu nguon ngoai
+        (thong bao tu chuong trinh khac) khong duoc dien giai nhu HTML, nen
+        the ``<b>`` chi hien ra nguyen van. Mac dinh giu nhu cu de loi nhac
+        Pomodoro/AI khong doi hanh vi.
         """
         if not text:
             return
+        self.label.setTextFormat(Qt.PlainText if plain else Qt.RichText)
         self.label.setText(text)
         self._resize_for_text()
 
@@ -102,5 +108,5 @@ class SpeechBubble(QWidget):
 
         self.move(QPoint(int(x), int(y)))
 
-    def say_above(self, text, pet_rect, duration_ms=6000):
-        self.say(text, duration_ms=duration_ms, anchor=pet_rect)
+    def say_above(self, text, pet_rect, duration_ms=6000, plain=False):
+        self.say(text, duration_ms=duration_ms, anchor=pet_rect, plain=plain)

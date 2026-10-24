@@ -40,7 +40,14 @@ from gifpet.core import reminders as reminders_module
 from gifpet.core import screen_utils
 from gifpet.core import state as state_module
 from gifpet.core.config import Config
-from gifpet.ui import gif_player, pet_actions, pet_runtime, tray_menu, window_skin
+from gifpet.ui import (
+    gif_player,
+    notification_panel,
+    pet_actions,
+    pet_runtime,
+    tray_menu,
+    window_skin,
+)
 from gifpet.ui.dialogs import ResizeDialog, SettingsDialog
 from gifpet.ui.gif_library_dialog import GifLibraryDialog
 from gifpet.ui.speech_bubble import SpeechBubble
@@ -93,6 +100,15 @@ class PetWindow(QLabel):
         self.brain = Brain(self.config)
         # Cau hoi dang cho nguoi dung xac nhan (hanh dong co tac dung phu).
         self._pending_action = None
+        # Thong bao tu nguon ngoai: chi nhan/hien thi, khong co hanh dong.
+        # ``notification_panel.setup`` dien cac thuoc tinh nay trong _setup_timers.
+        self.notifications_state = None
+        self.notifications = None
+        self.notification_inbox = None
+        self.notification_timer = None
+        self._notification_errors = 0
+        self._notification_history_dialog = None
+        self._notification_settings_dialog = None
         # Hang doi loi nhac luu ben (core/reminders.py).
         self.reminders = reminders_module.Reminders()
         # Gom su kien cho "pet tu noi" (core/proactive.py). Chi co tac dung
@@ -123,9 +139,29 @@ class PetWindow(QLabel):
         self._setup_window_flags()
         self._load_gif()
         self._setup_timers()
+        # Thong bao phai co timer truoc khi menu khay doc trang thai cua no.
+        self._setup_notifications()
         self._setup_tray()
         self._setup_shortcuts()
         self._restore_geometry()
+
+    def _setup_notifications(self):
+        """Noi module thong bao vao pet: chi doc mot thu muc va hien thi.
+
+        Khong goi model, khong chay lenh, khong mo duong dan. Loi khi khoi tao
+        (thu muc hong, JSON trang thai hong) chi lam tat tinh nang thong bao,
+        phan con lai cua pet van chay.
+        """
+        try:
+            notification_panel.setup(self)
+        except Exception as exc:  # noqa: BLE001 - khong duoc lam chet pet
+            self.notifications = None
+            self.notification_timer = None
+            print(
+                f"[cảnh báo] không bật được tính năng thông báo ({exc}). "
+                "Pet vẫn chạy bình thường.",
+                file=sys.stderr,
+            )
 
     @property
     def state(self):
@@ -761,12 +797,20 @@ class PetWindow(QLabel):
             self._sync_focus_with_pomodoro()
             self.announce(message, duration_ms=9000)
 
-    def announce(self, message, duration_ms=6000):
+    def announce(self, message, duration_ms=6000, plain=False):
         """Cho pet noi mot cau: hien bong bong thoai va thong bao khay.
 
-        Sau nay AI co the goi cung phuong thuc nay.
+        AI va loi nhac Pomodoro goi cung phuong thuc nay. ``plain=True`` dung
+        cho thong bao tu chuong trinh khac: noi dung chi la chu thuong, khong
+        dien giai HTML hay mo duong dan.
         """
         if not message:
+            return
+        if plain:
+            # Thong bao ngoai: chi hien thi, khong bao khay o day vi panel
+            # da tu gui khay theo cai dat rieng cua no.
+            self._show_bubble(message, duration_ms, plain=True)
+            print(f"[thông báo] {message}")
             return
         if self.config.get("pomodoro_bubble", True):
             self._show_bubble(message, duration_ms)
@@ -774,12 +818,14 @@ class PetWindow(QLabel):
             tray_menu.notify(self, message)
         print(f"[nói] {message}")
 
-    def _show_bubble(self, message, duration_ms):
+    def _show_bubble(self, message, duration_ms, plain=False):
         """Hien bong bong thoai tren dau pet."""
         if self.bubble is None:
             self.bubble = SpeechBubble()
         # Dung chinh kich thuoc cua so pet lam moc.
-        self.bubble.say_above(message, self.frameGeometry(), duration_ms)
+        self.bubble.say_above(
+            message, self.frameGeometry(), duration_ms, plain=plain
+        )
 
     def toggle_pomodoro(self):
         """Bat/tat che do nhac tap trung / nghi."""
@@ -962,6 +1008,54 @@ class PetWindow(QLabel):
         self._apply_pomodoro_settings()
         self._apply_switch_timer()
         self._apply_walk_timer()
+        self._apply_notification_settings()
+
+    def _apply_notification_settings(self):
+        """Ap dung lai cai dat thong bao sau khi dong hop thoai Cai dat."""
+        if self.notifications is None and self.notification_timer is None:
+            # Tinh nang khong khoi tao duoc luc mo pet; thu lai mot lan.
+            self._setup_notifications()
+            return
+        notification_panel.apply_config(self)
+
+    # ------------------------------------------------------------------
+    # Thong bao tu nguon ngoai (chi nhan, khong hanh dong)
+    # ------------------------------------------------------------------
+    def open_notification_history(self):
+        """Mo cua so xem lai thong bao da nhan."""
+        if self.notifications is None:
+            self.announce(
+                "Tính năng thông báo chưa sẵn sàng. Xem chi tiết trong terminal.",
+                duration_ms=5000,
+            )
+            return
+        self._notification_history_dialog = notification_panel.open_history(self)
+
+    def open_notification_settings(self):
+        """Mo hop thoai cai dat rieng cho thong bao."""
+        if self.notifications is None:
+            self.announce(
+                "Tính năng thông báo chưa sẵn sàng. Xem chi tiết trong terminal.",
+                duration_ms=5000,
+            )
+            return
+        self._notification_settings_dialog = notification_panel.open_settings(self)
+
+    def toggle_notifications(self, enabled=None):
+        """Bat/tat nhan thong bao tu menu khay; nho lai trong config.json."""
+        if self.notifications is None and self.notification_timer is None:
+            return
+        if enabled is None:
+            enabled = not notification_panel.is_enabled(self)
+        notification_panel.set_enabled(self, bool(enabled), persist=True)
+
+    def toggle_notification_mute(self, muted=None):
+        """Tam im: van nhan vao lich su nhung khong hien bong bong/khay."""
+        if self.notifications is None:
+            return
+        if muted is None:
+            muted = not notification_panel.is_muted(self)
+        notification_panel.set_muted(self, bool(muted))
 
     def _apply_pomodoro_settings(self):
         """Bat/tat dong ho theo cai dat moi."""
@@ -1009,6 +1103,7 @@ class PetWindow(QLabel):
     # Thoat
     # ------------------------------------------------------------------
     def quit_app(self):
+        self._shutdown_notifications()
         self.config.save()
         if self.bubble is not None:
             self.bubble.hide()
@@ -1016,16 +1111,35 @@ class PetWindow(QLabel):
             self.tray.hide()
         self.app.quit()
 
+    def _shutdown_notifications(self):
+        """Dung vong doc hop thu va dong cac cua so thong bao dang mo."""
+        timer = getattr(self, "notification_timer", None)
+        if timer is not None:
+            timer.stop()
+        for name in ("_notification_history_dialog",
+                     "_notification_settings_dialog"):
+            dialog = getattr(self, name, None)
+            if dialog is not None:
+                try:
+                    dialog.close()
+                except RuntimeError:
+                    pass  # cua so da bi Qt huy
+                setattr(self, name, None)
+
     def _release_movies(self):
         """Dung va nha het QMovie truoc khi cua so bi huy."""
         gif_player.release_movies(self)
 
     def closeEvent(self, event):
         # Tat het timer truoc khi nha tai nguyen: tranh tick vao luc dang don.
-        for timer in (self.switch_timer, self.behavior_timer, self.walk_timer,
-                      self.fall_timer, self.state_timer, self.pomodoro_timer,
-                      self.fullscreen_timer, self.reminder_timer):
+        timers = [self.switch_timer, self.behavior_timer, self.walk_timer,
+                  self.fall_timer, self.state_timer, self.pomodoro_timer,
+                  self.fullscreen_timer, self.reminder_timer]
+        if getattr(self, "notification_timer", None) is not None:
+            timers.append(self.notification_timer)
+        for timer in timers:
             timer.stop()
+        self._shutdown_notifications()
         self._release_movies()
         self.config.save()
         if self.tray is not None:

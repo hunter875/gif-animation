@@ -119,6 +119,37 @@ def build_menu(window):
     window.action_chat = QAction("Hỏi pet…", window)
     window.action_chat.triggered.connect(window.open_chat)
 
+    # --- Thong bao ---
+    # Chi nhan va hien thi thong bao tu nguon ngoai. Bat/tat va tam im goi lai
+    # dung cac ham cua ``notification_panel`` de mot noi xu ly duy nhat.
+    window.action_notifications = QAction(
+        "Bật nhận thông báo", window, checkable=True
+    )
+    window.action_notifications.setToolTip(
+        "Nhận thông báo từ hộp thư thư mục do chương trình khác ghi vào"
+    )
+    window.action_notifications.triggered.connect(
+        lambda checked: window.toggle_notifications(checked)
+    )
+
+    window.action_notification_mute = QAction("Tạm im", window, checkable=True)
+    window.action_notification_mute.setToolTip(
+        "Vẫn nhận vào lịch sử nhưng không hiện bong bóng hay thông báo khay"
+    )
+    window.action_notification_mute.triggered.connect(
+        lambda checked: window.toggle_notification_mute(checked)
+    )
+
+    window.action_notification_history = QAction("Thông báo đã nhận…", window)
+    window.action_notification_history.triggered.connect(
+        window.open_notification_history
+    )
+
+    window.action_notification_settings = QAction("Cài đặt thông báo…", window)
+    window.action_notification_settings.triggered.connect(
+        window.open_notification_settings
+    )
+
     # --- Cua so ---
     window.action_click_through = QAction(
         "Click xuyên qua pet", window, checkable=True
@@ -164,6 +195,12 @@ def build_menu(window):
     menu.addMenu(window.pomodoro_menu)
     menu.addSeparator()
     menu.addAction(window.action_chat)
+    menu.addSeparator()
+    menu.addAction(window.action_notifications)
+    menu.addAction(window.action_notification_mute)
+    menu.addAction(window.action_notification_history)
+    menu.addAction(window.action_notification_settings)
+    menu.addSeparator()
     menu.addAction(window.action_click_through)
     menu.addAction(window.action_hide_fullscreen)
     menu.addAction(window.action_pin)
@@ -205,6 +242,23 @@ def sync_menu(window):
     window.action_click_through.setChecked(bool(cfg.get("click_through")))
     window.action_pin.setChecked(bool(cfg.get("pin_to_top")))
     window.action_hide_fullscreen.setChecked(bool(cfg.get("hide_on_fullscreen")))
+
+    # Trang thai thong bao lay tu module thong bao, khong doan tu config.
+    from gifpet.ui import notification_panel
+
+    enabled = notification_panel.is_enabled(window)
+    window.action_notifications.setChecked(enabled)
+    window.action_notifications.setText(
+        "Bật nhận thông báo" if enabled else "Tắt nhận thông báo"
+    )
+    window.action_notification_mute.setChecked(notification_panel.is_muted(window))
+    window.action_notification_mute.setEnabled(enabled)
+    window.action_notification_history.setEnabled(
+        getattr(window, "notifications", None) is not None
+    )
+    window.action_notification_settings.setEnabled(
+        getattr(window, "notifications", None) is not None
+    )
 
 
 def popup_menu(window, position):

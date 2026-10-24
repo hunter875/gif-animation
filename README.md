@@ -59,10 +59,51 @@ Cách 2: nhập trong Cài đặt → lưu vào `secrets.json` (quyền `0600`,
 thư mục `0700`). Key **không bao giờ** nằm trong `config.json`.
 Chi tiết bảo mật: `docs/SECURITY.md`.
 
+**Thông báo từ chương trình khác (chỉ nhận, chưa có gì để gửi đi)**
+
+Pet đọc một thư mục hộp thư và hiện thông báo do chương trình khác ghi vào,
+dưới dạng **chữ thường**: không diễn giải HTML, không bấm được liên kết,
+không mở đường dẫn, không chạy lệnh, không gọi model AI.
+
+- Định dạng một thông báo là một tệp JSON. Producer ghi file tạm rồi thay thế
+  (`os.replace`) nên pet không bao giờ đọc phải tệp đang ghi dở.
+- Hộp thư mặc định: `<thư mục cấu hình>/notifications-inbox`
+  (ví dụ Windows: `%APPDATA%\GifAnimation\notifications-inbox`).
+  Đổi được trong menu khay → "Cài đặt thông báo…".
+- Mặc định kiểm tra mỗi 2 giây. Mỗi vòng đọc có giới hạn và chỉ hiện một
+  thông báo, nên hộp thư có nhiều việc dồn lại cũng không làm treo UI.
+- Mỗi thông báo có mức độ (`info`, `success`, `warning`, `error`) và thời
+  gian còn hiệu lực (`ttl_seconds`, mặc định 600, tối đa 7 ngày).
+- "Tạm im" vẫn nhận vào lịch sử nhưng không hiện bong bóng hay thông báo khay.
+- Lịch sử tối đa 200 mục, chỉ lưu chữ; xem ở "Thông báo đã nhận…" và xoá được.
+
+Gửi thử bằng công cụ có sẵn (chỉ cần Python, **không cần PyQt**):
+
+```bash
+python tools/notify_pet.py --source build --title "Xong" --message "Đã build xong"
+python tools/notify_pet.py --source hermes --title "Việc chạy nền" \
+    --message "Tác vụ đã xong" --severity success --ttl 3600
+python tools/notify_pet.py --inbox "D:/gif/inbox" --source test --message "Xin chào"
+```
+
+- `--source` bắt buộc: chữ thường, số, `.`, `_`, `-`; tối đa 48 ký tự.
+- `--title` và `--message`: cần ít nhất một cái, tối đa 2000 ký tự.
+- Mã thoát: `0` đã ghi, `2` tham số/dữ liệu sai, `3` không ghi được hộp thư.
+
+Chương trình khác cũng ghi được trực tiếp: đặt một tệp `.json` vào hộp thư
+với các khoá `id`, `source`, `title`, `message`, `severity`, `created_at`,
+`expires_at` (xem `gifpet/notifications/models.py`). Tên tệp bắt đầu bằng
+dấu chấm bị bỏ qua.
+
+> Đây là **phần nhận** của MVP: pet chỉ hiển thị những gì được gửi tới.
+> Chưa có chat, chưa có điều khiển tác vụ, và **chưa có bộ test tự động cho
+> phần này** — xem `docs/ROADMAP.md`.
+
 **Khay hệ thống**
 Menu khay gồm: hiện/ẩn pet, tạm dừng animation, tự động đổi GIF, pet tự đi,
 chế độ tập trung, cho pet ngủ ngay, nhắc tập trung/nghỉ (Pomodoro),
-hỏi pet (AI), click xuyên qua pet, ẩn khi fullscreen,
+hỏi pet (AI), bật/tắt nhận thông báo, tạm im, thông báo đã nhận,
+cài đặt thông báo, click xuyên qua pet, ẩn khi fullscreen,
 luôn nổi trên cùng, thư viện GIF, chỉnh kích thước, đưa về giữa màn hình,
 cài đặt và thoát.
 
@@ -195,6 +236,13 @@ Cấu trúc:
 | `gifpet/ui/dialogs.py` | Dialog resize và cài đặt |
 | `gifpet/ui/gif_library_dialog.py` | Dialog thư viện GIF có thumbnail |
 | `pets/<tên>/pet.json` | Mô tả nhân vật: kích thước, tốc độ, tính cách |
+| `gifpet/notifications/models.py` | Kiểu dữ liệu thông báo, kiểm tra và giới hạn độ dài |
+| `gifpet/notifications/sender.py` | Ghi thông báo vào hộp thư kiểu atomic |
+| `gifpet/notifications/inbox.py` | Đọc hộp thư có giới hạn, bỏ qua tệp hỏng |
+| `gifpet/notifications/controller.py` | Vòng tick, hàng đợi, hết hạn, chống trùng |
+| `gifpet/notifications/state.py` | Lịch sử và cài đặt thông báo (chỉ chữ) |
+| `gifpet/ui/notification_panel.py` | Nối thông báo với pet: timer, bong bóng, khay, lịch sử |
+| `tools/notify_pet.py` | CLI gửi thông báo cho pet (không cần PyQt) |
 | `tests/test_core.py` | 83 test đơn vị |
 | `tests/test_pomodoro.py` | 32 test nhắc tập trung / nghỉ |
 | `tests/test_speech_bubble.py` | 14 test bong bóng thoại |
@@ -226,6 +274,9 @@ Chạy test:
 # hoặc
 QT_QPA_PLATFORM=offscreen .venv/bin/python tests/test_core.py
 ```
+
+Phần thông báo (nhận/hiển thị) **chưa có test tự động**; muốn thử tay thì chạy
+`python tools/notify_pet.py --source thu --title "Xin chào" --message "Thử"`.
 
 Tài liệu có mục lục riêng: [`docs/README.md`](docs/README.md).
 Bảo mật (chống prompt injection, API key, quota, chi phí) ở
