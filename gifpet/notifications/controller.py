@@ -48,15 +48,35 @@ class NotificationController:
             window=window,
             clock=self.clock,
         )
-        self.inbox_source = inbox_source
-        if registry is None:
-            registry = default_registry(inbox_source)
-        elif not isinstance(registry, NotificationRegistry):
+        self.inbox_source = None
+        self._custom_sources = {}
+        if isinstance(registry, NotificationRegistry):
+            if inbox_source is None:
+                inbox_source = registry.get(InboxSource.source_id)
+            else:
+                self._absorb_custom(registry)
+            self.registry = registry
+        else:
+            # Registry khong hop le: dung registry moi chi gom nguon inbox,
+            # khong ghi de len registry goc.
             registry = default_registry()
-        self.registry = registry
+            self.registry = registry
+        if inbox_source is not None:
+            self.inbox_source = inbox_source
+            if InboxSource.source_id not in self.registry:
+                self.registry.register(inbox_source)
+        self.state.set_setting("inbox_path", self.inbox_source.inbox.directory
+                               if self.inbox_source is not None else "")
         self.last_poll = 0.0
         self.last_error = ""
         self.poll_count = 0
+
+    def _absorb_custom(self, registry):
+        """Ghi nho nguon trusted khac (ngoai inbox) de giu khi doi inbox."""
+        for source in registry.sources():
+            if getattr(source, "source_id", None) == InboxSource.source_id:
+                continue
+            self._custom_sources[source.source_id] = source
 
     # ------------------------------------------------------------------
     # Cau hinh
@@ -68,21 +88,30 @@ class NotificationController:
             self.dispatcher.clear("tắt thông báo")
 
     def set_muted(self, muted):
-        """Am (mute): im lang hoan toan, khong hien bong bong hay khay."""
+        """Am (mute): im lang hoan toan, khong hien bong bong hay khay.
+
+        Thong bao da xep hang duoc giu lai (khong mat); khi bo am chung duoc
+        phat, va thong bao het han trong luc am bi bo qua voi chan doan.
+        """
         self.state.set_setting("muted", bool(muted))
-        if muted:
-            self.dispatcher.clear("âm thông báo")
 
     def set_inbox(self, directory):
-        """Doi thu muc inbox luc dang chay (nguoi dung chon o Cai dat)."""
+        """Doi thu muc inbox luc dang chay (nguoi dung chon o Cai dat).
+
+        Nguon khac da dang ky (``registry.register``) van duoc giu; neu tep
+        xoa lich su dang giu queue thi thong bao cho phat lai van con.
+        """
         directory = (directory or "").strip()
         self.state.set_setting("inbox_path", directory)
         if not directory:
             self.inbox_source = None
         else:
             self.inbox_source = InboxSource(directory, now=self.clock)
-        self.registry = default_registry(self.inbox_source)
-        self.dispatcher.clear("đổi hộp thư")
+        if self.inbox_source is not None:
+            self._custom_sources[InboxSource.source_id] = self.inbox_source
+        else:
+            self._custom_sources.pop(InboxSource.source_id, None)
+        self.registry = default_registry(*self._custom_sources.values())
         self.last_error = ""
         return self.inbox_source
 
@@ -117,15 +146,18 @@ class NotificationController:
         self.last_poll = now
         self.poll_count += 1
         if not self.state.active():
-            self.dispatcher.clear("tắt/âm thông báo")
-            self._acknowledge_handled()
+            # Tat/am: khong doc them va KHONG don queue - thong bao con han
+            # duoc hien khi bat/bo am lai (expiry van kiem tra luc phat).
             return 0
         if (
             self.inbox_source is not None
             and self.poll_count % INBOX_CHECK_EVERY == 1
             and not self.inbox_available()
         ):
-            return 0
+            # Inbox thieu/hong chi bo qua nguon inbox, nguon khac van chay.
+            return self.dispatcher.collect(
+                _registry_without(self.registry, InboxSource.source_id), now=now
+            )
         accepted = self.dispatcher.collect(self.registry, now=now)
         self._acknowledge_handled()
         return accepted
@@ -159,8 +191,8 @@ class NotificationController:
         return self.state.recent(limit)
 
     def clear_history(self):
-        count = self.state.clear_history()
-        self.dispatcher.clear("xóa lịch sử")
+        """Xoa lich su hien thi; giu dedup de khong phat lai tin da xu ly."""
+        count = self.state.clear_history_view()
         return count
 
     def stats(self):
@@ -180,6 +212,16 @@ class NotificationController:
             "expired": counts.get("expired", 0),
             "source_errors": counts.get("source_errors", 0),
         }
+
+
+def _registry_without(registry, source_id):
+    """Ban sao registry bo mot nguon (khong sua registry goc)."""
+    copy = NotificationRegistry()
+    for source in registry.sources():
+        if getattr(source, "source_id", None) == source_id:
+            continue
+        copy.register(source)
+    return copy
 
 
 def poll_interval_from_config(value):

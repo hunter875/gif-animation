@@ -11,12 +11,16 @@ hinh**. Cu the:
   tam ``.tmp`` bi bo qua).
 - Khong di theo symlink/reparse point, khong doc hardlink (so link > 1):
   do la cach pho bien de keo pet doc tep ngoai thu muc.
-- Ten tep khong duoc chua duong dan, khong duoc la ``.``/``..``.
-- Gioi han tung luot: so tep liet ke, so tep doc, so byte moi tep, so byte
-  tong, so thong bao tra ve.
+- Ten tep khong duoc chua duong dan, dau hai cham (o dia/ADS), ky tu dieu
+  khien, khong duoc la ``.``/``..`` hay ten thiet bi Windows (``CON``...).
+- Gioi han tung luot: so muc thu muc duyet (``MAX_DIR_ENTRIES``), so tep liet
+  ke, so tep doc, so byte moi tep, so byte tong, so thong bao tra ve. Duyet
+  ``os.scandir`` kieu lazy, khong vat chat hoa ca thu muc.
 - Tep hong hay qua gioi han: bo qua va tang bo dem chan doan; chi in log
   theo nhip (``diagnostic_interval``) de khong spam terminal.
 - Gioi han bo dem chan doan: chi giu ``DIAGNOSTIC_SAMPLES`` mau gan nhat.
+- Ack chi xoa tep JSON **hop le cau truc** va co id trung ten tep; tep khac
+  (``package.json``, JSON hong, tep khong khop) duoc giu nguyen.
 
 Module nay **khong** goi mang, khong chay lenh, khong import dong.
 """
@@ -39,6 +43,19 @@ DIAGNOSTIC_INTERVAL_SECONDS = 30.0
 
 INBOX_SUFFIX = ".json"
 
+# Ten tep dai nhat chap nhan: id toi da 96 ky tu + hau to ``.json`` + du phong.
+MAX_NAME_LEN = 128
+# Ten thiet bi Windows (CON, NUL, COM1...) khong bao gio la ten tep hop le.
+_RESERVED_NAMES = frozenset(
+    ("CON", "PRN", "AUX", "NUL")
+    + tuple(f"COM{i}" for i in range(1, 10))
+    + tuple(f"LPT{i}" for i in range(1, 10))
+)
+
+# Gioi han co dinh cho mot luot ``names()``: so muc thu muc duoc xem xet
+# (truoc khi loc). Thu muc lon khong lam luot poll cham vo han.
+MAX_DIR_ENTRIES = 2000
+
 # Windows: FILE_ATTRIBUTE_REPARSE_POINT. os.lstat bao cao co nay cho junction
 # va symlink, nen chan duoc ca truong hop `islink` khong bat.
 _FILE_ATTRIBUTE_REPARSE_POINT = 0x400
@@ -54,12 +71,19 @@ class InboxProblem(Exception):
 
 
 def is_safe_name(name):
-    """Ten tep an toan: khong duong dan, khong dau cham, khong cham tron."""
+    """Ten tep an toan: chi ten di dong duoc, khong duong dan/ADS/dieu khien."""
     if not isinstance(name, str) or not name:
         return False
-    if "/" in name or "\\" in name or "\x00" in name:
+    if len(name) > MAX_NAME_LEN:
+        return False
+    if any(ord(ch) < 32 or ord(ch) == 0x7F for ch in name):
+        return False
+    if "/" in name or "\\" in name or ":" in name or "\x00" in name:
         return False
     if name in (".", "..") or name.startswith("."):
+        return False
+    stem = name[: -len(INBOX_SUFFIX)] if name.endswith(INBOX_SUFFIX) else name
+    if stem.upper() in _RESERVED_NAMES:
         return False
     return name.endswith(INBOX_SUFFIX)
 
@@ -79,6 +103,8 @@ class Inbox:
         self._now = now or time.time
         self._last_diagnostic = 0.0
         self.diagnostics = []      # (thoi diem, ten tep, ly do) - toi da 5
+        self.diagnostic_count = 0
+        self.skipped_count = 0
         self.bytes_read = 0
 
     # ------------------------------------------------------------------
@@ -105,30 +131,46 @@ class Inbox:
     # Liet ke
     # ------------------------------------------------------------------
     def names(self):
-        """Ten tep ``.json`` an toan, sap xep theo ten, toi da gioi han."""
+        """Ten tep ``.json`` an toan, sap xep theo ten, toi da gioi han.
+
+        Duyet ``os.scandir`` theo kieu lazy: chi doc den khi du
+        ``MAX_FILES_LISTED`` ten hop le hoac cham tran ``MAX_DIR_ENTRIES`` muc
+        (ke ca muc khong hop le), roi dong iterator. Khong bao gio vat chat
+        hoa toan bo thu muc.
+        """
+        names = []
+        examined = 0
+        capped = False
         try:
-            entries = list(os.scandir(self.directory))
+            with os.scandir(self.directory) as entries:
+                for entry in entries:
+                    examined += 1
+                    if examined > MAX_DIR_ENTRIES:
+                        capped = True
+                        break
+                    try:
+                        is_file = entry.is_file(follow_symlinks=False)
+                    except OSError:
+                        continue
+                    if not is_file:
+                        continue
+                    if not is_safe_name(entry.name):
+                        continue
+                    names.append(entry.name)
+                    if len(names) >= MAX_FILES_LISTED:
+                        capped = True
+                        break
         except FileNotFoundError:
             raise InboxProblem("missing", self.directory)
+        except NotADirectoryError:
+            raise InboxProblem("not_directory", self.directory)
         except OSError as exc:
             raise InboxProblem("unreadable", str(exc))
 
-        names = []
-        for entry in entries:
-            if len(names) >= MAX_FILES_LISTED:
-                self._diagnose("<listing>", "too_many_files")
-                break
-            try:
-                is_file = entry.is_file(follow_symlinks=False)
-            except OSError:
-                continue
-            if not is_file:
-                continue
-            if not is_safe_name(entry.name):
-                continue
-            names.append(entry.name)
+        if capped:
+            self._diagnose("<listing>", "too_many_files")
         names.sort()
-        return names
+        return names[:MAX_FILES_LISTED]
 
     # ------------------------------------------------------------------
     # Doc
@@ -159,15 +201,36 @@ class Inbox:
         if size <= 0:
             raise InboxProblem("empty_file", name)
 
+        # Mo khong theo link (O_NOFOLLOW) va doc qua descriptor da duoc xac
+        # nhan la **cung** tep da lstat: thay the tep bang hardlink giua lstat
+        # va open se bi bat (dev/ino/link count/type lech).
+        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
+        flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
         try:
-            with open(path, "rb") as handle:
-                # Doc toi da +1 byte: tep phinh ra giua lstat va read van
-                # bi cat, khong bao gio doc khong gioi han.
-                raw = handle.read(self.max_file_bytes + 1)
+            fd = os.open(path, flags)
         except FileNotFoundError:
             raise InboxProblem("vanished", name)
         except OSError as exc:
             raise InboxProblem("unreadable", str(exc))
+        try:
+            try:
+                opened = os.fstat(fd)
+            except OSError as exc:
+                raise InboxProblem("unreadable", str(exc))
+            _verify_same_entry(info, opened, name)
+            if getattr(opened, "st_size", size) > self.max_file_bytes:
+                raise InboxProblem("too_large", name)
+            try:
+                # Doc toi da +1 byte: tep phinh ra sau khi mo van bi cat,
+                # khong bao gio doc khong gioi han.
+                raw = _read_bounded(fd, self.max_file_bytes + 1)
+            except OSError as exc:
+                raise InboxProblem("unreadable", str(exc))
+        finally:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
         if len(raw) > self.max_file_bytes:
             raise InboxProblem("too_large", name)
         self.bytes_read += len(raw)
@@ -212,8 +275,9 @@ class Inbox:
     def poll(self, limit=MAX_NOTIFICATIONS_PER_POLL, now=None):
         """Doc cac tep moi nhat, tra ``(notifications, names_handled)``.
 
-        ``names_handled`` gom ca tep hong de caller don chung di (tranh doc
-        lai mai mai). Caller chi nen xoa khi da "ack" (xem ``controller``).
+        ``names_handled`` gom tep da xu ly va tep thong bao hop le nhung qua
+        han (don). Tep hong/khong phai thong bao thi chi chan doan, caller
+        khong the xoa chung.
         """
         current = self._now() if now is None else float(now)
         limit = max(1, min(MAX_NOTIFICATIONS_PER_POLL, int(limit)))
@@ -252,28 +316,43 @@ class Inbox:
             budget -= before
             try:
                 payload = self.read(name)
-                notification = PetNotification.parse(payload, now=current)
             except InboxProblem as exc:
                 handled.append(name)
                 self._diagnose(name, exc.reason)
                 continue
+            try:
+                notification = PetNotification.parse(payload, now=current)
             except NotificationError as exc:
-                handled.append(name)
+                # Chi tep JSON **hop le ve cau truc** moi duoc coi la da xu
+                # ly (de don). JSON hong hoac tep khong phai thong bao
+                # (package.json, config...) duoc giu nguyen, chi chan doan.
                 self._diagnose(name, exc.reason)
                 continue
-            handled.append(name)
             if notification.expired(current):
+                # Thong bao that nhung da het han: don khong hien thi.
+                handled.append(name)
                 self._diagnose(name, "expired")
                 continue
+            if not self._name_matches(payload, name):
+                self._diagnose(name, "name_mismatch")
+                continue
+            handled.append(name)
             results.append(notification)
         return results, handled
+
+    def _name_matches(self, payload, name):
+        """Ten tep phai khop id trong payload (chan xoa nham tep cua nguoi khac)."""
+        return (
+            isinstance(payload, dict)
+            and payload.get("id") == name[: -len(INBOX_SUFFIX)]
+        )
 
     # ------------------------------------------------------------------
     # Don tep da xu ly (ack)
     # ------------------------------------------------------------------
     def remove(self, name):
         """Xoa mot tep da xu ly. Khong bao gio xoa ngoai thu muc inbox."""
-        if not is_safe_name(name):
+        if not self._removable(name):
             return False
         path = os.path.join(self.directory, name)
         try:
@@ -282,9 +361,35 @@ class Inbox:
             return False
         if _is_link(info) or not _is_regular(info):
             return False
+        if getattr(info, "st_nlink", 1) > 1:
+            return False
         try:
             os.unlink(path)
         except OSError:
+            return False
+        return True
+
+    def _removable(self, name):
+        """True neu tep la thong bao cau truc hop le dung ten cua chinh no.
+
+        Kiem tra lai o thoi diem xoa: caller khong the chi dua ten la xoa duoc
+        tep khac (``package.json``, JSON hong, tep khong khop id).
+        """
+        if not is_safe_name(name):
+            return False
+        before = self.bytes_read
+        try:
+            payload = self.read(name)
+        except InboxProblem:
+            return False
+        finally:
+            # Kiem tra lai khong duoc tinh la byte da xu ly trong thong ke.
+            self.bytes_read = before
+        if not self._name_matches(payload, name):
+            return False
+        try:
+            PetNotification.parse(payload)
+        except NotificationError:
             return False
         return True
 
@@ -332,9 +437,17 @@ class InboxSource(NotificationSource):
     display_name = "Hộp thư JSON"
 
     def __init__(self, directory, max_file_bytes=MAX_FILE_BYTES,
-                 max_files=MAX_FILES_READ, now=None):
-        self.inbox = Inbox(directory, max_file_bytes=max_file_bytes,
-                           max_files=max_files, now=now)
+                 max_files=MAX_FILES_READ, now=None, inbox=None):
+        # UI da dung ``InboxSource(Inbox(path))``: nhan ca thuc the ``Inbox``
+        # lan duong dan thu muc (chuoi/PathLike), khong bao gio boc them lan
+        # hai thanh chuoi duong dan cua doi tuong Inbox.
+        if inbox is not None:
+            self.inbox = inbox
+        elif isinstance(directory, Inbox):
+            self.inbox = directory
+        else:
+            self.inbox = Inbox(directory, max_file_bytes=max_file_bytes,
+                               max_files=max_files, now=now)
         self.pending_ack = []
 
     def poll(self, limit):
@@ -347,6 +460,36 @@ class InboxSource(NotificationSource):
         names = self.pending_ack
         self.pending_ack = []
         return names
+
+
+def _read_bounded(fd, limit):
+    """Doc toi da ``limit`` byte tu descriptor, khong doc qua gioi han."""
+    chunks = []
+    total = 0
+    while total < limit:
+        chunk = os.read(fd, min(MAX_FILE_BYTES, limit - total))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+    return b"".join(chunks)
+
+
+def _verify_same_entry(expected, opened, name):
+    """Descriptor vua mo phai la chinh tep da lstat (khong bi thay the)."""
+    if _is_link(opened) or not _is_regular(opened):
+        raise InboxProblem("replaced", name)
+    if getattr(opened, "st_nlink", 1) > 1:
+        raise InboxProblem("hardlink", name)
+    try:
+        same = (
+            expected.st_dev == opened.st_dev
+            and expected.st_ino == opened.st_ino
+        )
+    except AttributeError:
+        same = True
+    if not same:
+        raise InboxProblem("replaced", name)
 
 
 def _is_link(info):

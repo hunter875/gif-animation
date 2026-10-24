@@ -17,6 +17,7 @@ Vi sao atomic:
 
 import json
 import os
+import re
 import tempfile
 
 from gifpet.notifications.models import (
@@ -28,6 +29,26 @@ from gifpet.notifications.models import (
 
 TEMP_PREFIX = ".notify-"
 TEMP_SUFFIX = ".tmp"
+
+# Ten di dong duoc: khong dau hai cham (o dia ``Z:``, ADS ``a:b``), khong
+# khoang trang, khong ky tu dieu khien, khong dau cham o dau, khong ``.``/``..``.
+_PORTABLE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$")
+_RESERVED_WINDOWS = frozenset(
+    ("CON", "PRN", "AUX", "NUL")
+    + tuple(f"COM{i}" for i in range(1, 10))
+    + tuple(f"LPT{i}" for i in range(1, 10))
+)
+
+
+def portable_json_name(ident):
+    """Ten tep ``<id>.json`` an toan da nen tang, hoac ``None`` neu id xau."""
+    if not isinstance(ident, str) or not _PORTABLE_NAME.match(ident):
+        return None
+    if ident in (".", ".."):
+        return None
+    if ident.split(".", 1)[0].upper() in _RESERVED_WINDOWS:
+        return None
+    return f"{ident}.json"
 
 
 class SenderError(RuntimeError):
@@ -59,10 +80,13 @@ def write_notification(directory, notification):
     """
     if not isinstance(notification, PetNotification):
         raise SenderError("bad_type", type(notification).__name__)
+    # Ten tep duoc suy ra tu id, nen id phai la ten di dong duoc: chan tien to
+    # o dia (``Z:``), ADS, dau hai cham, duong dan va ky tu dieu khien truoc
+    # khi noi vao thu muc inbox.
+    name = portable_json_name(notification.id)
+    if name is None:
+        raise SenderError("bad_name", str(notification.id)[:64])
     path = ensure_inbox(directory)
-    name = f"{notification.id}{'.json'}"
-    if os.sep in name or "/" in name or name.startswith("."):
-        raise SenderError("bad_name", notification.id)
     target = os.path.join(path, name)
     payload = notification.to_dict()
 

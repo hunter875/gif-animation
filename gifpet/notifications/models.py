@@ -32,7 +32,8 @@ MAX_MESSAGE_LEN = 2000
 # Thoi gian tao khong duoc lech qua xa so voi dong ho may: file rac co
 # timestamp nam 1970 hoac nam 3000 deu bi tu choi thay vi giu trong queue.
 MAX_CLOCK_SKEW_SECONDS = 24 * 60 * 60
-# TTL hop ly: tu vai giay den mot tuan. 0/khong co nghia la dung mac dinh.
+# TTL hop ly: tu 1 giay den mot tuan; ngoai khoang bi tu choi (khong cat am).
+MIN_TTL_SECONDS = 1.0
 MAX_TTL_SECONDS = 7 * 24 * 60 * 60
 DEFAULT_TTL_SECONDS = 10 * 60
 
@@ -189,13 +190,17 @@ class PetNotification:
             created_at = float(created_at)
         except (TypeError, ValueError):
             raise NotificationError("created_at_not_number", repr(created_at))
-        try:
-            ttl = float(ttl_seconds)
-        except (TypeError, ValueError):
+        # TTL sai phai bi tu choi, khong duoc am tham cat: producer can biet
+        # thong bao cua no se het han khi nao (uoc luong sai lam mat tin).
+        if isinstance(ttl_seconds, bool) or not isinstance(ttl_seconds, (int, float)):
             raise NotificationError("ttl_not_number", repr(ttl_seconds))
+        ttl = float(ttl_seconds)
         if ttl != ttl or ttl in (float("inf"), float("-inf")):
             raise NotificationError("ttl_not_finite", repr(ttl_seconds))
-        ttl = max(1.0, min(MAX_TTL_SECONDS, ttl))
+        if ttl < MIN_TTL_SECONDS:
+            raise NotificationError("ttl_too_short", repr(ttl_seconds))
+        if ttl > MAX_TTL_SECONDS:
+            raise NotificationError("ttl_too_long", repr(ttl_seconds))
         expires_at = created_at + ttl
         if id is None:
             id = new_id()

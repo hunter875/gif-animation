@@ -9,9 +9,10 @@ Tep trang thai nam **ngoai repo**, cung thu muc cau hinh voi ``config.json``
 
 Vi sao dedup phai ben vung: pet khoi dong lai van doc lai inbox (producer co
 the chua don tep). Neu chi giu ``seen`` trong RAM thi thong bao cu se hien
-lai moi lan mo app. Khi nguoi dung "xoa lich su", ``seen`` cung bi xoa theo
-va nhung thong bao **da qua han** khong bao gio duoc phat lai; chi thong bao
-con han moi co the hien lai mot lan.
+lai moi lan mo app. Xoa lich su chi xoa ``history`` (``clear_history_view``),
+khong dong vao ``seen``; muon phat lai tu dau thi goi ``clear_history``, nhung
+thong bao **da qua han** van khong bao gio duoc phat lai; chi thong bao con han
+moi co the hien lai mot lan.
 
 Gioi han cung (owner co the ha qua config, khong the nang):
 
@@ -171,8 +172,17 @@ class NotificationState:
     # ------------------------------------------------------------------
     # Cai dat
     # ------------------------------------------------------------------
-    def get_setting(self, key):
-        return self.settings.get(key, DEFAULT_SETTINGS.get(key))
+    def get_setting(self, key, default=None):
+        """Gia tri cai dat; thieu key thi dung ``default`` (hoac mac dinh goc).
+
+        Tang UI/controller goi ``get_setting(key, False)`` tu truoc, nen tham
+        so thu hai la tuy chon va giu tuong thich nguoc.
+        """
+        if key in self.settings:
+            return self.settings[key]
+        if default is not None:
+            return default
+        return DEFAULT_SETTINGS.get(key)
 
     def set_setting(self, key, value, save=True):
         if key not in DEFAULT_SETTINGS:
@@ -256,14 +266,26 @@ class NotificationState:
         return entry
 
     def clear_history(self, save=True):
-        """Xoa history **va** danh dau dedup (nguoi dung muon xem lai tu dau).
+        """Xoa history *va* danh dau dedup (xem duoc lai tu dau).
 
-        Nhac lai: nho xoa ``seen``, thong bao con han trong inbox co the hien
-        lai mot lan; thong bao da qua han van bi bo qua vi ``expired``.
+        Nho xoa ``seen``, thong bao con han trong inbox co the hien lai mot
+        lan; thong bao da qua han van bi bo qua vi ``expired``.
         """
         count = len(self.history)
         self.history = []
         self.seen = {}
+        if save:
+            self.save()
+        return count
+
+    def clear_history_view(self, save=True):
+        """Chi xoa history hien thi; giu ``seen`` de khong replay tin cu.
+
+        Dung khi nguoi dung xoa lich su nhung khong muon inbox da xu ly bi
+        phat lai sau restart.
+        """
+        count = len(self.history)
+        self.history = []
         if save:
             self.save()
         return count
