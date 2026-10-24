@@ -548,9 +548,9 @@ class InboxReadTests(TempDirCase):
         notifications, handled = box.poll(now=NOW)
         self.assertEqual([n.id for n in notifications], [])
         # Khong duoc xoa file ben ngoai qua acknowledge.
-        box.acknowledge("n1.json")
+        self.assertEqual(box.acknowledge(["n1.json"]), 0)
         self.assertTrue(os.path.exists(outside))
-        self.assertIn("n1.json", handled)
+        self.assertTrue(os.path.islink(link))
 
     @unittest.skipUnless(hasattr(os, "link"), "khong ho tro hardlink")
     def test_hardlink_is_rejected(self):
