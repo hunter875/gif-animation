@@ -288,6 +288,10 @@ def apply_config(window):
     controller = getattr(window, "notifications", None)
     if controller is not None:
         controller.set_inbox(inbox_dir)
+        # Dong bo con tro tuong thich voi nguon hien tai cua controller, neu
+        # khong ``window.notification_inbox`` se con tro toi thu muc cu.
+        setattr(window, "notification_inbox",
+                getattr(controller, "inbox_source", None))
     _sync_state(
         window,
         {
@@ -479,13 +483,25 @@ class NotificationHistoryDialog(QDialog):
     def _status_text(self):
         controller = getattr(self.window, "notifications", None)
         lines = []
-        inbox = getattr(self.window, "notification_inbox", None)
-        if inbox is not None:
-            directory = inbox.inbox.directory
-            available = inbox.inbox.check()
+        # Ưu tiên nguồn hộp thư HIỆN TẠI của controller: sau apply_config,
+        # ``window.notification_inbox`` có thể còn trỏ tới thư mục cũ.
+        if controller is not None:
+            source = getattr(controller, "inbox_source", None)
+            directory = getattr(getattr(source, "inbox", None), "directory", None)
+            if directory is None:
+                inbox = getattr(self.window, "notification_inbox", None)
+                inbox_obj = getattr(inbox, "inbox", None)
+                directory = getattr(inbox_obj, "directory", None)
+        else:
+            inbox = getattr(self.window, "notification_inbox", None)
+            inbox_obj = getattr(inbox, "inbox", None)
+            directory = getattr(inbox_obj, "directory", None)
+        if directory is not None:
             lines.append(f"Hộp thư: {directory}")
-            if not available:
+            if self._inbox_available(controller) is False:
                 lines.append("Hộp thư chưa sẵn sàng (chưa có thư mục).")
+        else:
+            lines.append("Hộp thư: chưa cấu hình (không đọc được thư mục).")
         if controller is not None:
             stats = controller.stats()
             lines.append(
@@ -499,9 +515,41 @@ class NotificationHistoryDialog(QDialog):
                 lines.append("Nguồn: " + ", ".join(names))
         lines.append(
             "Chỉ lưu chữ của thông báo, tối đa 200 mục. "
-            "Xoá lịch sử cũng xoá danh sách chống trùng."
+            "Xoá lịch sử không xoá danh sách chống trùng, "
+            "nên thông báo đã nhận sẽ không bị hiện lại."
         )
         return "\n".join(lines)
+
+    def _inbox_available(self, controller):
+        """True/False khi biet duoc, None khi khong co cach kiem tra.
+
+        Uu tien ``controller.inbox_available()`` (noi da bat ``InboxProblem``);
+        khong bao gio nem loi ra ngoai du thua muc bi thieu hay khong doc duoc.
+        """
+        if controller is not None:
+            check = getattr(controller, "inbox_available", None)
+            if callable(check):
+                try:
+                    return bool(check())
+                except Exception:
+                    return False
+            inbox_obj = getattr(getattr(controller, "inbox_source", None), "inbox", None)
+            check = getattr(inbox_obj, "check", None)
+            if callable(check):
+                try:
+                    return bool(check())
+                except Exception:
+                    return False
+            return None
+        inbox = getattr(self.window, "notification_inbox", None)
+        inbox_obj = getattr(inbox, "inbox", None)
+        check = getattr(inbox_obj, "check", None)
+        if callable(check):
+            try:
+                return bool(check())
+            except Exception:
+                return False
+        return None
 
     def _show_current(self, current, _previous=None):
         if current is None:
