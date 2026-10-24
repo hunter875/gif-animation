@@ -15,7 +15,9 @@ hinh**. Cu the:
   khien, khong duoc la ``.``/``..`` hay ten thiet bi Windows (``CON``...).
 - Gioi han tung luot: so muc thu muc duyet (``MAX_DIR_ENTRIES``), so tep liet
   ke, so tep doc, so byte moi tep, so byte tong, so thong bao tra ve. Duyet
-  ``os.scandir`` kieu lazy, khong vat chat hoa ca thu muc.
+  ``os.scandir`` kieu lazy, khong vat chat hoa ca thu muc. Luot liet ke chi
+  tieu thu dung ``MAX_DIR_ENTRIES`` muc (``islice``), khong doc them muc thu
+  cap+1 chi de biet "con nua hay khong"; cham tran chi tang chan doan.
 - Tep hong hay qua gioi han: bo qua va tang bo dem chan doan; chi in log
   theo nhip (``diagnostic_interval``) de khong spam terminal.
 - Gioi han bo dem chan doan: chi giu ``DIAGNOSTIC_SAMPLES`` mau gan nhat.
@@ -107,6 +109,9 @@ class Inbox:
         self.diagnostic_count = 0
         self.skipped_count = 0
         self.bytes_read = 0
+        # So muc thu muc da xem trong luot ``names()`` gan nhat: chi de chan
+        # doan, khong phai du lieu nghiep vu va khong ton them I/O.
+        self.last_examined = 0
 
     # ------------------------------------------------------------------
     # Kiem tra thu muc
@@ -142,14 +147,14 @@ class Inbox:
         names = []
         examined = 0
         capped = False
+        entries_seen = 0
         try:
             with os.scandir(self.directory) as entries:
-                # Chi tieu thu toi da ``MAX_DIR_ENTRIES`` muc, khong hon.
-                for entry in itertools.islice(entries, MAX_DIR_ENTRIES + 1):
+                # Chi tieu thu toi da ``MAX_DIR_ENTRIES`` muc, khong hon:
+                # ``islice`` cat dung tran, khong doc them mot muc de doan
+                # "con nua hay khong" (muc thu cap+1 chi ton I/O vo ich).
+                for entry in itertools.islice(entries, MAX_DIR_ENTRIES):
                     examined += 1
-                    if examined > MAX_DIR_ENTRIES:
-                        capped = True
-                        break
                     try:
                         is_file = entry.is_file(follow_symlinks=False)
                     except OSError:
@@ -162,6 +167,12 @@ class Inbox:
                     if len(names) >= MAX_FILES_LISTED:
                         capped = True
                         break
+                else:
+                    # Da xem het tran ma van con muc: chi bao khi that su cham
+                    # tran, va khong tieu thu muc nao them.
+                    if examined >= MAX_DIR_ENTRIES:
+                        capped = True
+                entries_seen = examined
         except FileNotFoundError:
             raise InboxProblem("missing", self.directory)
         except NotADirectoryError:
@@ -169,6 +180,7 @@ class Inbox:
         except OSError as exc:
             raise InboxProblem("unreadable", str(exc))
 
+        self.last_examined = entries_seen
         if capped:
             self._diagnose("<listing>", "too_many_files")
         names.sort()

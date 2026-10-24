@@ -72,10 +72,16 @@ không mở đường dẫn, không chạy lệnh, không gọi model AI.
   Đổi được trong menu khay → "Cài đặt thông báo…".
 - Mặc định kiểm tra mỗi 2 giây. Mỗi vòng đọc có giới hạn và chỉ hiện một
   thông báo, nên hộp thư có nhiều việc dồn lại cũng không làm treo UI.
+  Mỗi vòng chỉ xét tối đa 2000 mục trong thư mục; số mục bị bỏ qua được ghi
+  vào chẩn đoán của lần quét đó.
 - Mỗi thông báo có mức độ (`info`, `success`, `warning`, `error`) và thời
-  gian còn hiệu lực (`ttl_seconds`, mặc định 600, tối đa 7 ngày).
+  gian còn hiệu lực (`ttl_seconds`, mặc định 600, tối đa 7 ngày). Thông báo
+  hết hạn bị loại khỏi hàng đợi.
 - "Tạm im" vẫn nhận vào lịch sử nhưng không hiện bong bóng hay thông báo khay.
+  Thông báo đang chờ **không bị xoá** khi tạm im: chúng hiện lại sau khi bỏ
+  tạm im, hoặc bị loại khi hết hạn.
 - Lịch sử tối đa 200 mục, chỉ lưu chữ; xem ở "Thông báo đã nhận…" và xoá được.
+- Pet chỉ **hiển thị**; nó không ghi gì vào hộp thư.
 
 Gửi thử bằng công cụ có sẵn (chỉ cần Python, **không cần PyQt**):
 
@@ -83,9 +89,11 @@ Gửi thử bằng công cụ có sẵn (chỉ cần Python, **không cần PyQt
 python tools/notify_pet.py --source build --title "Xong" --message "Đã build xong"
 python tools/notify_pet.py --source hermes --title "Việc chạy nền" \
     --message "Tác vụ đã xong" --severity success --ttl 3600
-python tools/notify_pet.py --inbox "D:/gif/inbox" --source test --message "Xin chào"
+python tools/notify_pet.py --inbox ./inbox --source test --message "Xin chào"
 ```
 
+- Không truyền `--inbox` thì dùng `notifications_inbox` trong `config.json`
+  nếu đã đặt, ngược lại dùng hộp thư mặc định. `--inbox` truyền tay luôn thắng.
 - `--source` bắt buộc: chữ thường, số, `.`, `_`, `-`; tối đa 48 ký tự.
 - `--title` và `--message`: cần ít nhất một cái, tối đa 2000 ký tự.
 - Mã thoát: `0` đã ghi, `2` tham số/dữ liệu sai, `3` không ghi được hộp thư.
@@ -97,7 +105,8 @@ dấu chấm bị bỏ qua.
 
 > Đây là **phần nhận** của MVP: pet chỉ hiển thị những gì được gửi tới.
 > Chưa có chat, chưa có điều khiển tác vụ, và **chưa có bộ test tự động cho
-> phần này** — xem `docs/ROADMAP.md`.
+> phần này** — xem `docs/ROADMAP.md`. Test của phần thông báo đang chờ lượt
+> chạy cuối của người phụ trách.
 
 **Khay hệ thống**
 Menu khay gồm: hiện/ẩn pet, tạm dừng animation, tự động đổi GIF, pet tự đi,
@@ -241,7 +250,7 @@ Cấu trúc:
 | `gifpet/notifications/inbox.py` | Đọc hộp thư có giới hạn, bỏ qua tệp hỏng |
 | `gifpet/notifications/controller.py` | Vòng tick, hàng đợi, hết hạn, chống trùng |
 | `gifpet/notifications/state.py` | Lịch sử và cài đặt thông báo (chỉ chữ) |
-| `gifpet/ui/notification_panel.py` | Nối thông báo với pet: timer, bong bóng, khay, lịch sử |
+| `gifpet/ui/notification_panel.py` | Nối thông báo với pet: timer, bong bóng, khay, lịch sử, `NotificationSupportMixin` giữ các phương thức vòng đời/menu chỉ dành cho thông báo mà `PetWindow` kế thừa |
 | `tools/notify_pet.py` | CLI gửi thông báo cho pet (không cần PyQt) |
 | `tests/test_core.py` | 83 test đơn vị |
 | `tests/test_pomodoro.py` | 32 test nhắc tập trung / nghỉ |
@@ -275,7 +284,8 @@ Chạy test:
 QT_QPA_PLATFORM=offscreen .venv/bin/python tests/test_core.py
 ```
 
-Phần thông báo (nhận/hiển thị) **chưa có test tự động**; muốn thử tay thì chạy
+Phần thông báo (nhận/hiển thị) **chưa có test tự động được chạy trong lần
+sửa này**; muốn thử tay thì chạy
 `python tools/notify_pet.py --source thu --title "Xin chào" --message "Thử"`.
 
 Tài liệu có mục lục riêng: [`docs/README.md`](docs/README.md).

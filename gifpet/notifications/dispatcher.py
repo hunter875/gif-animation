@@ -68,7 +68,10 @@ class Dispatcher:
         }
 
     def clear(self, reason="reset"):
-        """Bo toan bo queue (khi nguoi dung am thong bao hoac tat tinh nang).
+        """Bo toan bo queue theo yeu cau tuong minh (reset, tat han tinh nang).
+
+        Khong duoc goi tu nhanh tat/am cua ``next_display``: am tam thoi giu
+        thong bao con han cho toi khi mo lai.
 
         Khong dung ``state.seen``: thong bao da bo khong duoc phat lai tu dia
         neu producer con giu tep, va do la hanh vi co chu dich ("im lang la
@@ -159,13 +162,18 @@ class Dispatcher:
         Thong bao het han tai thoi diem phat bi bo qua va danh dau seen (de
         khong doc lai tep).
 
+        Khi tinh nang dang tat/am, ham chi tra ``None`` va **giu nguyen**
+        queue: tat/am tam thoi khong duoc lam mat thong bao con han. Thong bao
+        chi bi loai khi het han (luc phat lai) hoac khi code goi
+        ``clear()``/``state`` doi hanh vi.
+
         ``rate limit`` chi anh huong viec phat; thuong thi queue ngan nen
         chenh lech vai giay la chap nhan duoc.
         """
         now = self._clock() if now is None else float(now)
         if not self.state.active():
-            if self._queue:
-                self.clear("tắt/âm thông báo")
+            # KHONG goi ``clear()`` o day: am-roi-mo phai con giu thong bao cho
+            # toi khi het han. Viec don dep co chu dich nam o ``clear()``.
             return None
         if not self._queue:
             return None

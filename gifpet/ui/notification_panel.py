@@ -10,11 +10,15 @@ Nguyen tac:
 - Khong bam duoc lien ket, khong mo duong dan, khong chay lenh, khong goi AI.
 - Moi vong tick deu di qua ``PetWindow._guarded`` de loi khong lam treo UI.
 - Polling dien ra tren luong Qt chinh, trong mot lan doc co gioi han moi lan.
+- ``NotificationSupportMixin`` giu cac ham chi-lien-quan-thong-bao cua cua so
+  pet (khoi tao, menu khay, don dep). ``PetWindow`` ke thua mixin nay nhung
+  ``QLabel`` van la lop goc dau tien.
 
 Xem docs/MODULAR-ASSISTANT.md (pham vi) va docs/SECURITY.md (rang buoc).
 """
 
 import os
+import sys
 import time
 
 from PyQt5.QtCore import Qt, QTimer
@@ -123,8 +127,14 @@ def _max_queue(config):
 
 
 def build_state(config):
-    """Trang thai thong bao (lich su, cai dat, dedup) luu canh config.json."""
-    return NotificationState(state_path(os.path.dirname(config_path())))
+    """Trang thai thong bao (lich su, cai dat, dedup) luu canh config.json.
+
+    Dung **chinh** duong dan ``config.path`` duoc truyen vao (khong phai
+    ``config_path()`` toan cuc) de profile/tests co the cach ly hoan toan:
+    state nam cung thu muc voi file cau hinh dang dung.
+    """
+    path = getattr(config, "path", None) or config_path()
+    return NotificationState(state_path(os.path.dirname(path)))
 
 
 def setup(window):
@@ -241,7 +251,11 @@ def set_enabled(window, enabled, persist=True):
 
 
 def set_muted(window, muted):
-    """Tam im: don hang doi va danh dau da thay, khong hien gi."""
+    """Tam im: khong hien gi nhung **giu** thong bao con han trong queue.
+
+    Mo lai (unmute) se hien tiep cac thong bao chua het han; thong bao het
+    han trong luc im lang bi loai khi phat lai (khong do tin cu).
+    """
     controller = getattr(window, "notifications", None)
     if controller is not None:
         controller.set_muted(bool(muted))
@@ -290,6 +304,109 @@ def apply_config(window):
                 "notifications_poll_ms")))
         else:
             timer.stop()
+
+
+# ----------------------------------------------------------------------
+# Mixin noi vao PetWindow
+# ----------------------------------------------------------------------
+class NotificationSupportMixin:
+    """Mixin giu cac phuong thuc chi-lien-quan-thong-bao cua cua so pet.
+
+    Khong phai QObject: chi gom ham, khong tao widget, nen khong dung MRO.
+    ``PetWindow(QLabel, NotificationSupportMixin)`` giu ``QLabel`` la lop goc
+    dau tien (``window_skin`` doc ``type(window).__mro__[1]``) trong khi phan
+    thong bao nam gon mot cho. Moi ham dung ``self`` la cua so pet va chi goi
+    cac ham cap module o tren; ten ham giu nguyen vi menu khay tro thang vao.
+
+    Bat bien: khong goi AI, khong chay lenh, khong mo duong dan va luon hien
+    noi dung bang chu thuong (``announce(..., plain=True)``).
+    """
+
+    def _init_notification_fields(self):
+        """Dat cac thuoc tinh thong bao ve trang thai chua khoi tao."""
+        self.notifications_state = None
+        self.notifications = None
+        self.notification_inbox = None
+        self.notification_timer = None
+        self._notification_errors = 0
+        self._notification_history_dialog = None
+        self._notification_settings_dialog = None
+
+    def _setup_notifications(self):
+        """Noi module thong bao vao pet: chi doc mot thu muc va hien thi.
+
+        Khong goi model, khong chay lenh, khong mo duong dan. Loi khi khoi tao
+        (thu muc hong, JSON trang thai hong) chi lam tat tinh nang thong bao,
+        phan con lai cua pet van chay.
+        """
+        try:
+            setup(self)
+        except Exception as exc:  # noqa: BLE001 - khong duoc lam chet pet
+            self.notifications = None
+            self.notification_timer = None
+            print(
+                f"[cảnh báo] không bật được tính năng thông báo ({exc}). "
+                "Pet vẫn chạy bình thường.",
+                file=sys.stderr,
+            )
+
+    def _apply_notification_settings(self):
+        """Ap dung lai cai dat thong bao sau khi dong hop thoai Cai dat."""
+        if self.notifications is None and self.notification_timer is None:
+            # Tinh nang khong khoi tao duoc luc mo pet; thu lai mot lan.
+            self._setup_notifications()
+            return
+        apply_config(self)
+
+    def open_notification_history(self):
+        """Mo cua so xem lai thong bao da nhan."""
+        if self.notifications is None:
+            self.announce(_NOT_READY_TEXT, duration_ms=5000)
+            return
+        self._notification_history_dialog = open_history(self)
+
+    def open_notification_settings(self):
+        """Mo hop thoai cai dat rieng cho thong bao."""
+        if self.notifications is None:
+            self.announce(_NOT_READY_TEXT, duration_ms=5000)
+            return
+        self._notification_settings_dialog = open_settings(self)
+
+    def toggle_notifications(self, enabled=None):
+        """Bat/tat nhan thong bao tu menu khay; nho lai trong config.json."""
+        if self.notifications is None and self.notification_timer is None:
+            return
+        if enabled is None:
+            enabled = not is_enabled(self)
+        set_enabled(self, bool(enabled), persist=True)
+
+    def toggle_notification_mute(self, muted=None):
+        """Tam im: khong hien bong bong/khay, nhung giu tin con han trong queue."""
+        if self.notifications is None:
+            return
+        if muted is None:
+            muted = not is_muted(self)
+        set_muted(self, bool(muted))
+
+    def _shutdown_notifications(self):
+        """Dung vong doc hop thu va dong cac cua so thong bao dang mo."""
+        timer = getattr(self, "notification_timer", None)
+        if timer is not None:
+            timer.stop()
+        for name in ("_notification_history_dialog",
+                     "_notification_settings_dialog"):
+            dialog = getattr(self, name, None)
+            if dialog is not None:
+                try:
+                    dialog.close()
+                except RuntimeError:
+                    pass  # cua so da bi Qt huy
+                setattr(self, name, None)
+
+
+_NOT_READY_TEXT = (
+    "Tính năng thông báo chưa sẵn sàng. Xem chi tiết trong terminal."
+)
 
 
 # ----------------------------------------------------------------------

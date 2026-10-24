@@ -12,10 +12,13 @@ Cach dung co ban (thu muc mac dinh lay tu cau hinh nguoi dung):
 
     python tools/notify_pet.py --source build --title "Xong" --message "Đã build"
 
-Chon hop thu khac:
+Chon hop thu khac (duong dan tuong doi hoac bien moi truong):
 
-    python tools/notify_pet.py --inbox "D:/gif/inbox" --source hermes \\
+    python tools/notify_pet.py --inbox ./inbox --source hermes \
         --title "Việc chạy nền" --message "Tác vụ đã xong" --severity success
+
+Khi khong truyen ``--inbox``: dung ``notifications_inbox`` trong cau hinh neu
+da dat, nguoc lai dung ``<thu muc cau hinh>/notifications-inbox``.
 
 Ma thoat:
     0  da ghi thong bao
@@ -30,7 +33,7 @@ import sys
 # Cho phep chay truc tiep tu thu muc tools/ ma khong can cai dat goi.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from gifpet.core.config import default_inbox_dir  # noqa: E402
+from gifpet.core.config import Config, default_inbox_dir  # noqa: E402
 from gifpet.notifications.models import (  # noqa: E402
     DEFAULT_SEVERITY,
     DEFAULT_TTL_SECONDS,
@@ -94,7 +97,10 @@ def build_parser():
     parser.add_argument(
         "--inbox",
         default=None,
-        help="thư mục hộp thư; để trống sẽ dùng thư mục trong cấu hình của pet",
+        help=(
+            "thư mục hộp thư; bỏ trống sẽ dùng notifications_inbox trong cấu "
+            "hình của pet, nếu chưa đặt thì dùng thư mục mặc định"
+        ),
     )
     parser.add_argument(
         "--source",
@@ -125,9 +131,28 @@ def build_parser():
     return parser
 
 
+def configured_inbox():
+    """Thu muc inbox trong cau hinh nguoi dung, hoac ``""`` neu chua dat.
+
+    Chi doc cau hinh dang tep JSON (khong import Qt, khong mo mang). Cau hinh
+    hong khong duoc lam hong cong cu: khi do tra ve chuoi rong.
+    """
+    try:
+        value = Config().get("notifications_inbox")
+    except Exception:  # cau hinh doc duoc nhung hong kieu du lieu
+        return ""
+    return str(value or "").strip()
+
+
 def resolve_inbox(path):
-    """Thu muc hop thu: tham so dong lenh, neu khong co thi lay tu cau hinh."""
+    """Thu muc hop thu theo thu tu: ``--inbox``, cau hinh, mac dinh.
+
+    ``--inbox`` luon thang cau hinh; bo trong ca hai thi dung
+    ``default_inbox_dir()`` (thu muc cau hinh/notifications-inbox).
+    """
     text = str(path or "").strip()
+    if not text:
+        text = configured_inbox()
     if text:
         return os.path.abspath(os.path.expanduser(text))
     return default_inbox_dir()

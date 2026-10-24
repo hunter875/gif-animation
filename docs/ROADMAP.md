@@ -8,17 +8,19 @@ Chủ dự án thu gọn phạm vi: chỉ hiển thị thông báo, bỏ giao vi
 
 | Giai đoạn | Phạm vi | Trạng thái |
 |---|---|---|
-| N0 | Payload/protocol/registry cho nguồn notification | 🟡 Code xong (`gifpet/notifications/models.py`, `registry.py`), **chưa có test** |
-| N1 | Inbox JSON + producer CLI + validation/expiry/dedup | 🟡 Code xong (`inbox.py`, `sender.py`, `controller.py`, `tools/notify_pet.py`), **chưa có test** |
-| N2 | Bubble/tray/history/settings, mute và giới hạn spam | 🟡 UI đã nối vào pet (`ui/notification_panel.py`, `ui/tray_menu.py`), **chưa có test, chưa thử tay trên Windows** |
+| N0 | Payload/protocol/registry cho nguồn notification | 🟡 Code xong (`gifpet/notifications/models.py`, `registry.py`), **chờ lượt chạy test cuối** |
+| N1 | Inbox JSON + producer CLI + validation/expiry/dedup | 🟡 Code xong (`inbox.py`, `sender.py`, `controller.py`, `tools/notify_pet.py`), **chờ lượt chạy test cuối** |
+| N2 | Bubble/tray/history/settings, mute và giới hạn spam | 🟡 UI đã nối vào pet (`ui/notification_panel.py`, `ui/tray_menu.py`); mute không xoá thông báo đang chờ; **chờ lượt chạy test cuối, chưa thử tay trên Windows** |
 | N3 | Hướng dẫn nguồn Hermes và chương trình ngoài gửi tin | 🟡 Có hướng dẫn CLI trong `README.md`; đường dẫn Hermes thật **chưa thử** |
 | N4 | DS-B test độc lập, Codex tích hợp/test và nghiệm thu | ⛔ Chưa làm |
 
-**Việc còn lại của MVP thông báo:** viết test cho `gifpet/notifications/*`,
-`gifpet/ui/notification_panel.py`, `tools/notify_pet.py` và phần nối trong
-`pet_window`/`tray_menu`; chạy thử tay trên Windows (bong bóng, khay, tạm im,
-xoá lịch sử); xác nhận lại đường dẫn inbox của Hermes. Cho tới lúc đó phần
-này được coi là **chưa nghiệm thu**, chỉ nên dùng để thử.
+**Việc còn lại của MVP thông báo:** chạy bộ test độc lập cho
+`gifpet/notifications/*`, `gifpet/ui/notification_panel.py`,
+`tools/notify_pet.py` và phần nối trong `pet_window`/`tray_menu`; chạy thử tay
+trên Windows (bong bóng, khay, tạm im, xoá lịch sử); xác nhận lại đường dẫn
+inbox của Hermes. Cho tới lúc đó phần này được coi là **chưa nghiệm thu**, chỉ
+nên dùng để thử. Lượt sửa này **không chạy test** (môi trường không có shell);
+kết quả nghiệm thu do người phụ trách chạy.
 
 Lịch sử bên dưới phản ánh các giai đoạn cũ, không thay thế kết quả review
 Windows ngày 24/10/2026. Fullscreen trên Windows, hotkey toàn hệ thống và

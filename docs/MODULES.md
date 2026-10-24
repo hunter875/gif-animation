@@ -251,10 +251,46 @@ Nối `core/reminders.py` và `core/proactive.py` với UI. Tách ra khi
 ### `speech_bubble.py` (106 dòng)
 
 Bong bóng thoại. Tự co giãn theo nội dung, đặt phía trên pet, không nhận chuột.
+Cờ `plain=True` buộc hiển thị chữ thường (không diễn giải HTML) — dùng cho nội
+dung đến từ bên ngoài như thông báo.
 
 ### `gif_library_dialog.py` (161 dòng)
 
 Thư viện GIF: thumbnail, thêm/xoá/chọn.
+
+---
+
+## `notifications/` + `ui/notification_panel.py` — nhận thông báo (chỉ hiển thị)
+
+Chuỗi thuần Python (không Qt, trừ UI): `models` (kiểu dữ liệu + validate) →
+`inbox` (quét thư mục) / `registry` (nguồn đăng ký bằng code) → `controller`
+(vòng tick, hàng đợi, dedup) → `dispatcher` (chọn cái để hiện) →
+`ui/notification_panel` (bong bóng, khay, lịch sử, cài đặt).
+
+- `inbox.py`: chỉ đọc tệp thường, không theo symlink/hardlink/ADS; mỗi vòng
+  dùng `islice(entries, MAX_DIR_ENTRIES)` nên xét đúng 2000 mục và **không**
+  đọc thêm mục thứ 2001 để dò "còn nữa không". Giới hạn khác:
+  `MAX_FILES_LISTED=500`, `MAX_FILES_READ=40`, `MAX_FILE_BYTES=64 KB`,
+  `MAX_TOTAL_BYTES=512 KB`, `MAX_NOTIFICATIONS_PER_POLL=20`,
+  `DIAGNOSTIC_SAMPLES=5`.
+- `dispatcher.py`: hàng đợi `DEFAULT_MAX_QUEUE=32`, `MAX_DIAGNOSTICS=10`.
+  Khi tắt hoặc tạm im, `next_display` trả `None` và **không** xoá hàng đợi:
+  thông báo còn hạn sẽ hiện lại sau khi bỏ tạm im, hết hạn thì bị loại.
+- `state.py`: lịch sử 200 mục, chỉ lưu chữ; xoá được từ UI.
+- `ui/notification_panel.py`: ngoài hàm nối còn có `NotificationSupportMixin`
+  giữ các phương thức vòng đời/menu chỉ dành cho thông báo
+  (`_init_notification_fields`, `_setup_notifications`,
+  `_apply_notification_settings`, `open_notification_history`,
+  `open_notification_settings`, `toggle_notifications`,
+  `toggle_notification_mute`, `_shutdown_notifications`).
+  `PetWindow(QLabel, NotificationSupportMixin)` kế thừa chúng, nhờ vậy
+  `pet_window.py` ở dưới ngưỡng 1050 dòng và `window_skin` vẫn thấy `QLabel`
+  là lớp cơ sở đầu tiên (`type(window).__mro__[1]`). Mixin **không** kế thừa
+  `QObject`.
+- `build_state(config)` dùng `config.path` của đối tượng cấu hình được truyền
+  vào, nên hồ sơ cấu hình cách ly đúng thay vì đọc `config.json` toàn cục.
+- Không có chat, không điều khiển tác vụ, không mở URL, không chạy lệnh, không
+  gọi AI. Test cho phần này **chưa được chạy** trong lượt sửa này.
 
 ---
 
