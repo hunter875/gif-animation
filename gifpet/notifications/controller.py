@@ -102,6 +102,11 @@ class NotificationController:
         xoa lich su dang giu queue thi thong bao cho phat lai van con.
         """
         directory = (directory or "").strip()
+        # Nguon khac co the duoc dang ky *sau* khi tao controller: doc lai
+        # registry hien tai moi lan doi inbox.
+        registry = getattr(self, "registry", None)
+        if isinstance(registry, NotificationRegistry):
+            self._absorb_custom(registry)
         self.state.set_setting("inbox_path", directory)
         if not directory:
             self.inbox_source = None

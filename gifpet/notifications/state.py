@@ -266,17 +266,12 @@ class NotificationState:
         return entry
 
     def clear_history(self, save=True):
-        """Xoa history *va* danh dau dedup (xem duoc lai tu dau).
+        """Chi xoa history hien thi; giu ``seen`` (dedup) de khong replay.
 
-        Nho xoa ``seen``, thong bao con han trong inbox co the hien lai mot
-        lan; thong bao da qua han van bi bo qua vi ``expired``.
+        Cung hanh vi voi ``clear_history_view``: nguoi dung xoa lich su thi
+        thong bao da xu ly khong duoc phat lai sau restart.
         """
-        count = len(self.history)
-        self.history = []
-        self.seen = {}
-        if save:
-            self.save()
-        return count
+        return self.clear_history_view(save=save)
 
     def clear_history_view(self, save=True):
         """Chi xoa history hien thi; giu ``seen`` de khong replay tin cu.

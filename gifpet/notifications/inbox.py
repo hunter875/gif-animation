@@ -25,6 +25,7 @@ hinh**. Cu the:
 Module nay **khong** goi mang, khong chay lenh, khong import dong.
 """
 
+import itertools
 import json
 import os
 import time
@@ -143,7 +144,8 @@ class Inbox:
         capped = False
         try:
             with os.scandir(self.directory) as entries:
-                for entry in entries:
+                # Chi tieu thu toi da ``MAX_DIR_ENTRIES`` muc, khong hon.
+                for entry in itertools.islice(entries, MAX_DIR_ENTRIES + 1):
                     examined += 1
                     if examined > MAX_DIR_ENTRIES:
                         capped = True
@@ -482,13 +484,15 @@ def _verify_same_entry(expected, opened, name):
     if getattr(opened, "st_nlink", 1) > 1:
         raise InboxProblem("hardlink", name)
     try:
-        same = (
-            expected.st_dev == opened.st_dev
-            and expected.st_ino == opened.st_ino
-        )
+        expected_dev = expected.st_dev
+        expected_ino = expected.st_ino
+        opened_dev = opened.st_dev
+        opened_ino = opened.st_ino
     except AttributeError:
-        same = True
-    if not same:
+        # Thieu metadata dinh danh (dev/ino): khong the chung minh cung tep
+        # -> tu choi (fail closed) thay vi gia dinh ``same=True``.
+        raise InboxProblem("unverifiable", name)
+    if expected_dev != opened_dev or expected_ino != opened_ino:
         raise InboxProblem("replaced", name)
 
 
