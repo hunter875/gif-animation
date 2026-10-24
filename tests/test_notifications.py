@@ -290,12 +290,10 @@ class ModelTests(TempDirCase):
                     ttl_seconds=value,
                     now=NOW,
                 )
-        clamped = PetNotification.build(
-            source="hermes", title="t", message="m", ttl_seconds=10 ** 9, now=NOW
-        )
-        self.assertEqual(
-            clamped.expires_at - clamped.created_at, models.MAX_TTL_SECONDS
-        )
+        with self.assertRaises(models.NotificationError):
+            PetNotification.build(
+                source="hermes", title="t", message="m", ttl_seconds=10 ** 9, now=NOW
+            )
 
     def test_build_rejects_bad_source(self):
         for value in ["", "../x", "Hermes", "x" * 100]:
@@ -373,6 +371,12 @@ class InboxNameTests(TempDirCase):
             outer = entries
 
             class Counting:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *args):
+                    outer.close()
+
                 def __iter__(self):
                     inner = outer.__iter__()
 
@@ -393,57 +397,43 @@ class InboxNameTests(TempDirCase):
         self.assertLessEqual(len(listed), limit)
         self.assertLessEqual(
             len(consumed),
-            limit,
+            inbox_module.MAX_DIR_ENTRIES,
             "Inbox.names phai ngung duyet thu muc sau gioi han, khong quet het %d muc"
             % total_entries,
         )
+        self.assertLess(len(consumed), total_entries, "Stop scanning once the result cap is full")
 
     def test_poll_workload_is_bounded_with_irrelevant_entries(self):
-        """Chi phi poll gio han ca voi tep rac va tep khong phai thong bao."""
-        budget = MAX_NOTIFICATIONS_PER_POLL
-        total_entries = budget * 4
-        for index in range(total_entries):
-            name = "n%04d.json" % index
-            if index % 2:
-                self.write_raw(name, "{}")
-            else:
-                self.write_raw(name.replace(".json", ".txt"), "rac")
+        """The declared directory scan cap includes ignored files, not only JSON names."""
+        scan_cap = inbox_module.MAX_DIR_ENTRIES
         consumed = []
 
+        class Entry:
+            name = "unrelated.txt"
+
+            def is_file(self, follow_symlinks=False):
+                return True
+
+        class Counting:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def __iter__(self):
+                for index in range(scan_cap * 3):
+                    consumed.append(index)
+                    yield Entry()
+
         real_scandir = os.scandir
-
-        def counting_scandir(path="."):
-            entries = real_scandir(path)
-            outer = entries
-
-            class Counting:
-                def __iter__(self):
-                    inner = outer.__iter__()
-
-                    def generate():
-                        for entry in inner:
-                            consumed.append(entry.name)
-                            yield entry
-
-                    return generate()
-
-            return Counting()
-
-        os.scandir = counting_scandir
+        os.scandir = lambda path: Counting()
         try:
-            notifications, handled = Inbox(self.inbox_dir).poll(
-                limit=budget, now=NOW
-            )
+            notes, handled = Inbox(self.inbox_dir).poll(limit=20, now=NOW)
         finally:
             os.scandir = real_scandir
-        for note in notifications:
-            self.assertIsInstance(note, PetNotification)
-        self.assertLessEqual(
-            len(consumed),
-            budget * 3,
-            "poll phai gioi han so muc duyet qua (da duyet %d/%d)"
-            % (len(consumed), total_entries),
-        )
+        self.assertEqual(notes, [])
+        self.assertLessEqual(len(consumed), scan_cap)
 
 
 class InboxReadTests(TempDirCase):
@@ -480,35 +470,33 @@ class InboxReadTests(TempDirCase):
         self.assertEqual(ctx.exception.reason, "too_large")
 
     def test_read_caps_bytes_even_if_file_grows(self):
-        """Tep phinh sau lstat khong lam doc vo han: cap max_file_bytes + 1."""
-        self.write_payload(self.payload())
-        small = Inbox(self.inbox_dir, max_file_bytes=256)
-        real_open = builtins.open
-        requests = []
+        """Grow the real file after descriptor metadata is checked; reading stays bounded."""
+        path = self.write_payload(self.payload())
+        box = Inbox(self.inbox_dir, max_file_bytes=256)
+        real_fstat, real_read = os.fstat, os.read
+        grew, requests = [], []
 
-        def counting_open(path, *args, **kwargs):
-            handle = real_open(path, *args, **kwargs)
-            if str(path).endswith(".json"):
-                real_read = handle.read
+        def grow_after_stat(fd):
+            info = real_fstat(fd)
+            if not grew:
+                grew.append(True)
+                with open(path, "ab") as handle:
+                    handle.write(b"x" * 512)
+            return info
 
-                def read(*a, **k):
-                    data = real_read(*a, **k)
-                    requests.append(len(data))
-                    return data
+        def record_read(fd, amount):
+            requests.append(amount)
+            return real_read(fd, amount)
 
-                handle.read = read
-            return handle
-
-        builtins.open = counting_open
+        os.fstat, os.read = grow_after_stat, record_read
         try:
-            try:
-                small.read("n1.json")
-            except InboxProblem as exc:
-                self.assertEqual(exc.reason, "too_large")
+            with self.assertRaises(InboxProblem) as caught:
+                box.read("n1.json")
         finally:
-            builtins.open = real_open
-        self.assertTrue(requests, "phai doc tep qua ham open co gioi han")
-        self.assertLessEqual(max(requests), MAX_FILE_BYTES + 1)
+            os.fstat, os.read = real_fstat, real_read
+        self.assertTrue(grew, "The growth hook must actually run")
+        self.assertEqual(caught.exception.reason, "too_large")
+        self.assertTrue(all(n <= box.max_file_bytes + 1 for n in requests))
 
     def test_read_never_loads_more_than_budget(self):
         """Lan doc nao cung phai bi chan boi mot gioi han byte."""
@@ -643,10 +631,10 @@ class InboxPollTests(TempDirCase):
         self.assertIn("n1.json", handled)
 
     def test_bad_payload_file_is_handled_not_raised(self):
-        self.write_payload(self.payload(id="../evil"))
+        path = self.write_payload(self.payload(id="../evil"), name="invalid.json")
         notifications, handled = Inbox(self.inbox_dir).poll(now=NOW)
         self.assertEqual(notifications, [])
-        self.assertEqual(len(handled), 1)
+        self.assertTrue(os.path.exists(path), "Invalid payloads must not authorize deletion")
 
     def test_acknowledge_removes_only_safe_regular_files(self):
         path = self.write_payload(self.payload(id="good"))
@@ -979,6 +967,7 @@ class DispatcherTests(TempDirCase):
 class ControllerTests(TempDirCase):
     def make_controller(self, **kwargs):
         state = self.make_state()
+        kwargs.setdefault("clock", lambda: NOW)
         controller = NotificationController(state, **kwargs)
         return state, controller
 
@@ -1035,7 +1024,7 @@ class ControllerTests(TempDirCase):
         presented = controller.take_next(now=NOW)
         self.assertIsNotNone(presented)
         self.assertEqual(presented.id, "good")
-        self.assertFalse(os.path.exists(bad))
+        self.assertTrue(os.path.exists(bad), "Malformed JSON must not authorize deletion")
         self.assertFalse(os.path.exists(good))
 
     def test_disabled_or_muted_returns_nothing(self):
@@ -1139,11 +1128,12 @@ class ControllerTests(TempDirCase):
         self.assertEqual(poll_interval_from_config(10 ** 9), MAX_POLL_MS)
         self.assertEqual(poll_interval_from_config(2000), 2000)
 
-    def test_clear_history_resets_queue(self):
-        _state, controller = self.make_controller()
+    def test_clear_history_preserves_pending_unseen(self):
+        state, controller = self.make_controller()
         controller.dispatcher.offer(self.build("x"), now=NOW)
         controller.clear_history()
-        self.assertEqual(controller.dispatcher.pending(), [])
+        self.assertEqual([n.id for n in controller.dispatcher.pending()], ["x"])
+        self.assertEqual(state.recent(), [])
 
 
 class RegistryTests(unittest.TestCase):

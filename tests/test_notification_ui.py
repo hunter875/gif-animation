@@ -33,7 +33,7 @@ import sys  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PyQt5.QtCore import Qt  # noqa: E402
-from PyQt5.QtWidgets import QApplication  # noqa: E402
+from PyQt5.QtWidgets import QApplication, QPlainTextEdit  # noqa: E402
 
 from gifpet.core.config import Config  # noqa: E402
 from gifpet.notifications.controller import NotificationController  # noqa: E402
@@ -166,6 +166,7 @@ class BubbleTests(UiCase):
         bubble = self.window.bubble
         self.assertIsNotNone(bubble, "PetWindow phai co bong bong thoai")
         self.assertTrue(bubble.isVisible(), "bong bong phai hien sau khi announce")
+        self.window.bubble.hide()
         self.state.set_setting("bubble", False, save=False)
         notification_panel.show_notification(self.window, self.note())
         pump()
@@ -195,39 +196,21 @@ class HistoryDialogTests(UiCase):
     def dialog(self):
         return notification_panel.NotificationHistoryDialog(self.window)
 
-    def _name(self, widget):
-        for attribute in dir(widget):
-            if attribute.startswith("_"):
-                continue
-            try:
-                value = getattr(widget, attribute)
-            except Exception:
-                continue
-            if value is name:
-                return attribute
-        return None
-
     def _list(self, dialog):
-        name = self._name(dialog, "list")
-        self.assertIsNotNone(name, "cua so lich su phai co danh sach")
-        return getattr(dialog, name)
+        return dialog.list
 
     def _detail(self, dialog):
-        name = self._name(dialog, "detail")
-        self.assertIsNotNone(name, "cua so lich su phai co vung chi tiet")
-        return getattr(dialog, name)
+        return dialog.detail
 
     def _status(self, dialog):
-        name = self._name(dialog, "status")
-        self.assertIsNotNone(name, "cua so lich su phai co dong trang thai")
-        return getattr(dialog, name)
+        return dialog.status
 
     def test_empty_history_shows_placeholder(self):
         dialog = self.dialog()
         self.addCleanup(dialog.deleteLater)
         dialog._refresh()
         self.assertEqual(self._list(dialog).count(), 0)
-        self.assertEqual(self._detail(dialog).textFormat(), Qt.PlainText)
+        self.assertIsInstance(self._detail(dialog), QPlainTextEdit)
         self.assertTrue(self._detail(dialog).toPlainText())
 
     def test_history_rows_show_saved_entries(self):
@@ -249,7 +232,7 @@ class HistoryDialogTests(UiCase):
         rows.setCurrentRow(0)
         dialog._show_current(rows.currentItem())
         detail = self._detail(dialog)
-        self.assertEqual(detail.textFormat(), Qt.PlainText)
+        self.assertIsInstance(detail, QPlainTextEdit)
         text = detail.toPlainText()
         self.assertIn("<b>a</b>", text)
         self.assertIn("<script>b</script>", text)
@@ -358,7 +341,7 @@ class InboxPresenterTests(UiCase):
         return path
 
     def payload(self, **overrides):
-        now = int(time.time())
+        now = NOW
         data = {
             "id": "ui1",
             "source": "hermes",
@@ -412,7 +395,7 @@ class InboxPresenterTests(UiCase):
         dialog = notification_panel.NotificationHistoryDialog(self.window)
         self.addCleanup(dialog.deleteLater)
         dialog._refresh()
-        rows = UiCase._list(self, dialog)
+        rows = dialog.list
         self.assertEqual(rows.count(), 1)
         self.assertIn("Lich su", rows.item(0).text())
 
